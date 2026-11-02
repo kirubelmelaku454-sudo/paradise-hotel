@@ -1,0 +1,19 @@
+{
+  "short_name": "Paradise Hotel",
+  "name": "Paradise Hotel 5-Star · Debre Markos",
+  "description": "Premier 5-star luxury hotel, executive suites, gourmet dining, and co-working desks in Debre Markos, Ethiopia.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/home",
+  "display": "standalone",
+  "theme_color": "#0b1329",
+  "background_color": "#0b1329",
+  "orientation": "portrait-primary"
+}
+
