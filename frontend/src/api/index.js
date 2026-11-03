@@ -10,6 +10,23 @@ const BASE_URL =
     process.env.VITE_API_URL ||
     '/api';
 
+export const API_ORIGIN = (process.env.REACT_APP_API_URL || process.env.VITE_API_URL || '')
+    .replace(/\/api\/?$/, '');
+
+export const getMediaUrl = (imgPath) => {
+    if (!imgPath) return '';
+    if (imgPath.startsWith('http://') || imgPath.startsWith('https://') || imgPath.startsWith('data:')) {
+        return imgPath;
+    }
+    const cleanPath = imgPath.startsWith('/') ? imgPath : `/${imgPath}`;
+    if (API_ORIGIN) {
+        return `${API_ORIGIN}${cleanPath}`;
+    }
+    return (typeof window !== 'undefined' && window.location.hostname === 'localhost')
+        ? `http://localhost:5000${cleanPath}`
+        : cleanPath;
+};
+
 const API = axios.create({
     baseURL: BASE_URL,
     timeout: 20000,

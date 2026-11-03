@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import api from '../../api';
+import api, { getMediaUrl } from '../../api';
 import toast from 'react-hot-toast';
 import { LanguageContext } from '../../context/LanguageContext';
 import { CurrencyContext } from '../../context/CurrencyContext';
@@ -1109,7 +1109,7 @@ export default function AdminDashboard() {
                       <td style={{ padding: 10 }}>
                         {r.image ? (
                           <img
-                            src={r.image.startsWith('http') ? r.image : `http://localhost:5000${r.image}`}
+                            src={getMediaUrl(r.image)}
                             alt="Room"
                             style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }}
                             onError={(e) => { e.target.style.display = 'none'; }}
@@ -1275,7 +1275,7 @@ export default function AdminDashboard() {
                       <td style={{ padding: 10 }}>
                         {d.image ? (
                           <img
-                            src={d.image.startsWith('http') ? d.image : `http://localhost:5000${d.image}`}
+                            src={getMediaUrl(d.image)}
                             alt="Desk"
                             style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }}
                             onError={(e) => { e.target.style.display = 'none'; }}
@@ -1437,7 +1437,7 @@ export default function AdminDashboard() {
                       <td style={{ padding: 10 }}>
                         {f.image ? (
                           <img
-                            src={f.image.startsWith('http') ? f.image : `http://localhost:5000${f.image}`}
+                            src={getMediaUrl(f.image)}
                             alt="Food"
                             style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }}
                             onError={(e) => { e.target.style.display = 'none'; }}

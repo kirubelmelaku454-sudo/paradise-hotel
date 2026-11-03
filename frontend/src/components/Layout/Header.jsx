@@ -7,6 +7,7 @@ import { LanguageContext } from '../../context/LanguageContext';
 import NotificationBell from '../NotificationBell';
 import LuxuryLogo from '../Common/LuxuryLogo';
 import LiveWeatherWidget from '../Common/LiveWeatherWidget';
+import { getMediaUrl } from '../../api';
 import toast from 'react-hot-toast';
 
 const Header = ({ sidebarOpen, onSidebarToggle }) => {
@@ -176,7 +177,7 @@ const Header = ({ sidebarOpen, onSidebarToggle }) => {
                         <div className="header-avatar">
                             {user.profile_image ? (
                                 <img
-                                    src={user.profile_image.startsWith('http') ? user.profile_image : `http://localhost:5000${user.profile_image}`}
+                                    src={getMediaUrl(user.profile_image)}
                                     alt="Profile"
                                 />
                             ) : (
