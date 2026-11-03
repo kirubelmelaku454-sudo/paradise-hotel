@@ -17,8 +17,14 @@ const poolConfig = config.db.uri ? {
     queueLimit: 0
 };
 
-if (config.db.ssl) {
-    poolConfig.ssl = { rejectUnauthorized: false };
+const isCloudDb = config.db.ssl || 
+    (config.db.host && (config.db.host.includes('tidbcloud.com') || config.db.host.includes('aiven') || config.db.host.includes('clever-cloud')));
+
+if (isCloudDb) {
+    poolConfig.ssl = {
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: true
+    };
 }
 
 const pool = mysql.createPool(poolConfig);
