@@ -1,17 +1,33 @@
 import axios from 'axios';
 
 /**
- * Prefer relative "/api" so Create React App's package.json "proxy"
- * (http://localhost:5000) forwards requests and avoids CORS issues.
- * Override with REACT_APP_API_URL only when needed (e.g. production).
+ * Universal API Configuration for Paradise Hotel
+ * - Localhost: uses "/api" proxied by CRA to http://localhost:5000
+ * - Production (Vercel / live domains): connects directly to Render backend (https://paradise-hotel-ff69.onrender.com/api)
  */
+const PRODUCTION_BACKEND_URL = 'https://paradise-hotel-ff69.onrender.com';
+
+const isBrowser = typeof window !== 'undefined';
+const isLocalhost = isBrowser && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname.endsWith('.local')
+);
+
+const DEFAULT_API_URL = (!isLocalhost && isBrowser)
+    ? `${PRODUCTION_BACKEND_URL}/api`
+    : '/api';
+
 const BASE_URL =
     process.env.REACT_APP_API_URL ||
     process.env.VITE_API_URL ||
-    '/api';
+    DEFAULT_API_URL;
 
-export const API_ORIGIN = (process.env.REACT_APP_API_URL || process.env.VITE_API_URL || '')
-    .replace(/\/api\/?$/, '');
+export const API_ORIGIN = (
+    process.env.REACT_APP_API_URL ||
+    process.env.VITE_API_URL ||
+    (!isLocalhost && isBrowser ? PRODUCTION_BACKEND_URL : '')
+).replace(/\/api\/?$/, '');
 
 export const getMediaUrl = (imgPath) => {
     if (!imgPath) return '';
@@ -22,14 +38,14 @@ export const getMediaUrl = (imgPath) => {
     if (API_ORIGIN) {
         return `${API_ORIGIN}${cleanPath}`;
     }
-    return (typeof window !== 'undefined' && window.location.hostname === 'localhost')
+    return isLocalhost
         ? `http://localhost:5000${cleanPath}`
-        : cleanPath;
+        : `${PRODUCTION_BACKEND_URL}${cleanPath}`;
 };
 
 const API = axios.create({
     baseURL: BASE_URL,
-    timeout: 20000,
+    timeout: 60000, // 60s timeout ensures Render free-tier cold starts do not time out
 });
 
 API.interceptors.request.use(
@@ -58,19 +74,24 @@ API.interceptors.request.use(
 );
 
 API.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        // Guard against HTML returned when an endpoint returns index.html fallback
+        if (typeof response.data === 'string' && response.data.trim().startsWith('<!doctype html>')) {
+            console.warn('[API Notice] Received HTML instead of JSON for', response.config.url);
+        }
+        return response;
+    },
     (error) => {
         if (error.response && error.response.status === 401) {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             localStorage.removeItem('role');
         }
-        // Network error (backend down) — clearer message for callers
         if (!error.response) {
             error.message =
                 error.code === 'ECONNABORTED'
-                    ? 'Request timed out. Is the backend running on port 5000?'
-                    : 'Cannot reach the server. Start the backend (npm run dev in backend/) and ensure MySQL is running.';
+                    ? 'Server request timed out. The backend server may be waking up.'
+                    : 'Cannot reach the database server. Please check your connection or try again in a few moments.';
         }
         return Promise.reject(error);
     }

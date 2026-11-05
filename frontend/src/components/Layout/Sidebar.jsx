@@ -2,6 +2,8 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { LanguageContext } from '../../context/LanguageContext';
+import { ThemeContext } from '../../context/ThemeContext';
+import { CurrencyContext } from '../../context/CurrencyContext';
 import LuxuryLogo from '../Common/LuxuryLogo';
 import api, { getMediaUrl } from '../../api';
 
@@ -102,6 +104,9 @@ const getNavItems = (role, hasDiscount, t, user) => {
 const Sidebar = ({ isOpen, onClose }) => {
     const { user, logout } = useContext(AuthContext);
     const { t, lang, setLang, languages } = useContext(LanguageContext);
+    const { theme, toggleTheme, isDark } = useContext(ThemeContext);
+    const { currency, toggleCurrency } = useContext(CurrencyContext);
+
     const location = useLocation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -162,6 +167,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
     return (
         <aside className={`site-sidebar luxury-sidebar ${isOpen ? 'open' : ''}`}>
+            {/* 1. Header with Logo & Close Button */}
             <div className="sidebar-header">
                 <Link to="/home" className="sidebar-brand" onClick={onClose} style={{ textDecoration: 'none', color: 'inherit' }}>
                     <LuxuryLogo size="small" showText={false} />
@@ -171,13 +177,70 @@ const Sidebar = ({ isOpen, onClose }) => {
                     </div>
                 </Link>
                 {onClose && (
-                    <button type="button" className="sidebar-close-btn" onClick={onClose}>
+                    <button type="button" className="sidebar-close-btn" onClick={onClose} title="Close Navigation">
                         ✕
                     </button>
                 )}
             </div>
 
-            {/* Mobile User Profile & Instant Logout Card */}
+            {/* 2. Mobile Quick Preferences: Light / Dark Mode & Currency Switcher */}
+            <div className="sidebar-quick-theme-panel">
+                <div className="sidebar-theme-switch-row">
+                    <div className="sidebar-theme-label">
+                        <span className="theme-indicator-icon">{isDark ? '🌙' : '☀️'}</span>
+                        <span className="theme-indicator-text">
+                            {isDark ? t('themeDark', 'Dark Mode') : t('themeLight', 'Light Mode')}
+                        </span>
+                    </div>
+                    <div className="sidebar-theme-segmented-ctrl">
+                        <button
+                            type="button"
+                            className={`theme-segment-btn ${!isDark ? 'active' : ''}`}
+                            onClick={() => { if (isDark) toggleTheme(); }}
+                            title="Switch to Light Theme"
+                        >
+                            <span>☀️</span> {t('themeLight', 'Light')}
+                        </button>
+                        <button
+                            type="button"
+                            className={`theme-segment-btn ${isDark ? 'active' : ''}`}
+                            onClick={() => { if (!isDark) toggleTheme(); }}
+                            title="Switch to Dark Theme"
+                        >
+                            <span>🌙</span> {t('themeDark', 'Dark')}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="sidebar-theme-switch-row" style={{ marginTop: 8 }}>
+                    <div className="sidebar-theme-label">
+                        <span className="theme-indicator-icon">{currency === 'USD' ? '💵' : '🇪🇹'}</span>
+                        <span className="theme-indicator-text">
+                            {t('currency', 'Currency')} ({currency})
+                        </span>
+                    </div>
+                    <div className="sidebar-theme-segmented-ctrl">
+                        <button
+                            type="button"
+                            className={`theme-segment-btn ${currency === 'ETB' ? 'active' : ''}`}
+                            onClick={() => { if (currency !== 'ETB') toggleCurrency(); }}
+                            title="Ethiopian Birr (ETB)"
+                        >
+                            <span>🇪🇹</span> ETB
+                        </button>
+                        <button
+                            type="button"
+                            className={`theme-segment-btn ${currency === 'USD' ? 'active' : ''}`}
+                            onClick={() => { if (currency !== 'USD') toggleCurrency(); }}
+                            title="US Dollar (USD)"
+                        >
+                            <span>💵</span> USD
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* 3. Mobile User Profile & Instant Logout Card */}
             {user ? (
                 <div className="sidebar-user-card">
                     <div className="sidebar-user-info">
@@ -230,6 +293,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 </div>
             )}
 
+            {/* 4. Core Navigation Links */}
             <nav className="sidebar-nav">
                 <div className="sidebar-section-title">Navigation</div>
                 {navItems.map((item, idx) => {
@@ -261,8 +325,8 @@ const Sidebar = ({ isOpen, onClose }) => {
                 )}
             </nav>
 
+            {/* 5. Footer: Language & Contact Info */}
             <div className="sidebar-footer">
-                {/* Multilingual Selector inside Sidebar */}
                 <div style={{ padding: '0 8px 14px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
                         🌐 Language / ቋንቋ
