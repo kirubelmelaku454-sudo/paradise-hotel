@@ -62,6 +62,7 @@ const accountRoutes = require('./routes/accounts');
 const siteContentRoutes = require('./routes/siteContent');
 const receptionistRoutes = require('./routes/receptionist');
 const contactRoutes = require('./routes/contact');
+const chatRoutes = require('./routes/chat');
 
 // Register routes
 app.use('/api/auth', authRoutes);
@@ -80,6 +81,7 @@ app.use('/api/accounts', accountRoutes);
 app.use('/api/site', siteContentRoutes);
 app.use('/api/receptionist', receptionistRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Health check (also verifies the DB is actually reachable)
 app.get('/api/health', async (req, res) => {
@@ -107,6 +109,7 @@ app.get('/', (req, res) => {
             food: '/api/food',
             payments: '/api/payments',
             refunds: '/api/refunds',
+            chat: '/api/chat',
             health: '/api/health'
         }
     });

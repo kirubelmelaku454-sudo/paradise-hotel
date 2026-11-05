@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LanguageContext } from '../../context/LanguageContext';
 import LuxuryLogo from './LuxuryLogo';
+import AIModelSwitcher, { AI_MODELS } from './AIModelSwitcher';
+import API from '../../api';
 
-// Multilingual Knowledge Base for 24/7 AI Concierge
+// Multilingual Knowledge Base for 24/7 AI Concierge (Instant Offline Fallback)
 const KNOWLEDGE_BASE = [
     {
         id: 'rooms',
@@ -174,15 +176,12 @@ const KNOWLEDGE_BASE = [
 
 // Helper to detect language of input query
 const detectQueryLang = (text, activeLang) => {
-    // If text has Ethiopic characters (Ge'ez)
     if (/[\u1200-\u137F]/.test(text)) {
-        // Simple check for Tigrinya specific words
         if (text.includes('ከመይ') || text.includes('ክፍሊ') || text.includes('ጣውላ') || text.includes('ዕጾ') || text.includes('ደሓን')) {
             return 'ti';
         }
         return 'am';
     }
-    // Check for common Oromo words
     const lower = text.toLowerCase();
     if (lower.includes('akkam') || lower.includes('nagaa') || lower.includes('kutaa') || lower.includes('nyaata') || lower.includes('minjaala') || lower.includes('gatii')) {
         return 'om';
@@ -190,31 +189,52 @@ const detectQueryLang = (text, activeLang) => {
     return activeLang || 'en';
 };
 
+// Safe formatting for bold text markdown without dangerouslySetInnerHTML
+const renderFormattedText = (text) => {
+    if (!text) return '';
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        return part;
+    });
+};
+
 export default function AIConciergeWidget() {
     const { lang, t } = useContext(LanguageContext);
     const [isOpen, setIsOpen] = useState(false);
     const [input, setInput] = useState('');
+    const [selectedModel, setSelectedModel] = useState('gemini');
+    const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
     const chatEndRef = useRef(null);
+
+    const activeModel = AI_MODELS.find(m => m.id === selectedModel) || AI_MODELS[0];
 
     const getWelcomeMessage = (l) => {
         switch (l) {
             case 'am':
-                return 'ሰላም! እኔ በደብረ ማርቆስ ፓራዳይስ ሆቴል የ24 ሰዓት AI ረዳትዎ ነኝ። ስለ ክፍል ማስያዣ፣ ስለ ምግብ ትዕዛዝ፣ ስለ ጠረጴዛ ወይም ስለ ሌላ አገልግሎታችን በምን ልርዳዎት?';
+                return 'ሰላም! እኔ በደብረ ማርቆስ ፓራዳይስ ሆቴል የ24 ሰዓት ባለ 5-ኮከብ AI ረዳትዎ ነኝ። ከላይ ያሉትን አዝራሮች በመጠቀም በ Gemini፣ ChatGPT፣ Claude ወይም DeepSeek መካከል መቀያየር ይችላሉ። በምን ልርዳዎት?';
             case 'om':
-                return 'Akkam jirtu! Ani gargaaraa AI Hoteela Paaraadaayis Dabra Maarqoos sa\'aatii 24ti. Waa\'ee kutaalee, nyaata ajajuu ykn minjaala qabachuu irratti akkamitti isin gargaaruu danda\'a?';
+                return 'Akkam jirtu! Ani gargaaraa AI Hoteela Paaraadaayis Dabra Maarqoos sa\'aatii 24ti. Moodeelota Gemini, ChatGPT, Claude fi DeepSeek gidduutti jijjiiruu dandeessu. Akkamitti isin gargaaruu danda\'a?';
             case 'ti':
-                return 'ሰላም! ኣነ ኣብ ደብረ ማርቆስ ፓራዳይስ ሆቴል ናይ 24 ሰዓት ናይ AI ረዳኢኹም እየ። ብዛዕባ ክፍሊ ምትሓዝ፣ ምግቢ ምእዛዝ ወይ ጣውላ ምሓዝ ብኸመይ ክሕግዘኩም ይኽእል?';
+                return 'ሰላም! ኣነ ኣብ ደብረ ማርቆስ ፓራዳይስ ሆቴል ናይ 24 ሰዓት ናይ AI ረዳኢኹም እየ። ብሞዴላት Gemini, ChatGPT, Claude ወይ DeepSeek ክትጥቀሙ ትኽእሉ ኢኹም። ብኸመይ ክሕግዘኩም ይኽእል?';
             default:
-                return 'Greetings! I am your 24/7 AI Concierge at Paradise Hotel Debre Markos. How may I assist your stay, suite reservation, dining, or table booking today?';
+                return 'Greetings! I am your 5-Star AI Concierge at Paradise Hotel Debre Markos. You can switch between Google Gemini, OpenAI ChatGPT, Anthropic Claude, and DeepSeek above anytime. How may I assist your stay today?';
         }
     };
 
     const [messages, setMessages] = useState(() => [
-        { sender: 'concierge', text: getWelcomeMessage(lang) }
+        {
+            sender: 'concierge',
+            text: getWelcomeMessage(lang),
+            model: 'gemini',
+            modelName: 'Google Gemini 2.0',
+            modelColor: '#4285F4'
+        }
     ]);
 
-    // Update welcome message if user changes language and no chat has happened yet
     useEffect(() => {
         const handleOpen = () => {
             setIsOpen(true);
@@ -223,10 +243,17 @@ export default function AIConciergeWidget() {
         return () => window.removeEventListener('open-ai-concierge', handleOpen);
     }, []);
 
+    // Update welcome message if language changes and conversation hasn't started
     useEffect(() => {
         setMessages((prev) => {
             if (prev.length <= 1) {
-                return [{ sender: 'concierge', text: getWelcomeMessage(lang) }];
+                return [{
+                    sender: 'concierge',
+                    text: getWelcomeMessage(lang),
+                    model: selectedModel,
+                    modelName: activeModel.fullName,
+                    modelColor: activeModel.color
+                }];
             }
             return prev;
         });
@@ -236,64 +263,103 @@ export default function AIConciergeWidget() {
         if (isOpen && chatEndRef.current) {
             chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [messages, isOpen]);
+    }, [messages, isOpen, isLoading]);
 
-    const handleSend = (e) => {
+    const handleSend = async (e) => {
         if (e) e.preventDefault();
         const query = input.trim();
-        if (!query) return;
+        if (!query || isLoading) return;
 
         const userMsg = { sender: 'user', text: query };
         setMessages((prev) => [...prev, userMsg]);
         setInput('');
+        setIsLoading(true);
 
-        // Detect user query language
-        const targetLang = detectQueryLang(query, lang);
-        const lower = query.toLowerCase();
+        const currentActiveModel = activeModel;
 
-        // Smart Knowledge Base Matcher
-        let matched = null;
-        let highestMatches = 0;
+        try {
+            // Build history payload for contextual memory
+            const historyPayload = messages
+                .filter(m => m.text)
+                .slice(-6)
+                .map(m => ({
+                    role: m.sender === 'user' ? 'user' : 'assistant',
+                    content: m.text
+                }));
 
-        for (const item of KNOWLEDGE_BASE) {
-            let score = 0;
-            for (const k of item.keywords) {
-                if (lower.includes(k.toLowerCase())) {
-                    score += 1;
+            // Dispatch to backend /api/chat with selected model
+            const res = await API.post('/chat', {
+                prompt: query,
+                model: selectedModel,
+                history: historyPayload
+            });
+
+            if (res.data && res.data.success && res.data.reply) {
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        sender: 'concierge',
+                        text: res.data.reply,
+                        model: res.data.model || selectedModel,
+                        modelName: res.data.modelInfo?.displayName || currentActiveModel.fullName,
+                        modelColor: res.data.modelInfo?.badgeColor || currentActiveModel.color
+                    }
+                ]);
+            } else {
+                throw new Error('Invalid chat response from server');
+            }
+        } catch (err) {
+            console.warn('[AI Concierge Live Query Error - using smart fallback]:', err.message);
+
+            // Fallback: smart matching against knowledge base
+            const targetLang = detectQueryLang(query, lang);
+            const lower = query.toLowerCase();
+
+            let matched = null;
+            let highestMatches = 0;
+            for (const item of KNOWLEDGE_BASE) {
+                let score = 0;
+                for (const k of item.keywords) {
+                    if (lower.includes(k.toLowerCase())) score += 1;
+                }
+                if (score > highestMatches) {
+                    highestMatches = score;
+                    matched = item;
                 }
             }
-            if (score > highestMatches) {
-                highestMatches = score;
-                matched = item;
-            }
-        }
 
-        setTimeout(() => {
-            let responseText = '';
+            let fallbackText = '';
             if (matched && matched.answers) {
-                responseText = matched.answers[targetLang] || matched.answers[lang] || matched.answers.en;
+                fallbackText = matched.answers[targetLang] || matched.answers[lang] || matched.answers.en;
             } else {
-                // Intelligent Fallbacks
                 switch (targetLang) {
                     case 'am':
-                        responseText = 'ስለ መልዕክትዎ እናመሰግናለን! የሆቴላችን የሪሴፕሽን እና የኮንሲየር ቡድን 24 ሰዓት ዝግጁ ነው። ክፍሎችን ለማስያዝ፣ ምግብ ለማዘዝ፣ ጠረጴዛ ለመያዝ ወይም ከሰራተኞች ጋር በቀጥታ ለመገናኘት ከላይ ያሉትን አዝራሮች መጠቀም ይችላሉ።';
+                        fallbackText = `👑 **የፓራዳይስ ሆቴል AI ረዳት** (${currentActiveModel.fullName})\n\nስለ መልዕክትዎ እናመሰግናለን! የሆቴላችን የሪሴፕሽን እና የኮንሲየር ቡድን 24 ሰዓት ዝግጁ ነው። ክፍሎችን ለማስያዝ፣ ምግብ ለማዘዝ ወይም ጠረጴዛ ለመያዝ ከላይ ያሉትን አቋራጭ አዝራሮች መጠቀም ይችላሉ።`;
                         break;
                     case 'om':
-                        responseText = 'Waa\'ee gaaffii keessanii galatoomaa! Hojjattoonni kawaan fi keessummeessaa keenya sa\'aatii 24 isin gargaaruuf qophiidha. Kutaalee qabachuuf, nyaata ajajuuf ykn qunnamtiif cuqaasota armaan olii fayyadamaa.';
+                        fallbackText = `👑 **Gargaaraa AI Paaraadaayis** (${currentActiveModel.fullName})\n\nWaa'ee gaaffii keessanii galatoomaa! Hojjattoonni kawaan fi keessummeessaa keenya sa'aatii 24 isin gargaaruuf qophiidha.`;
                         break;
                     case 'ti':
-                        responseText = 'ብዛዕባ ሕቶኹም የቐንየልና! ናይ ሆቴልና ሪሴፕሽንን ኣቀባብላን ጋሻ ሰራሕተኛታት ንምሕጋዝኩም 24 ሰዓት ድሉዋት እዮም። ክፍሊ ንምሓዝ፣ ምግቢ ንምእዛዝ ወይ ጣውላ ንምትሓዝ ናይ ላዕሊ ሊንክታት ተጠቐሙ።';
+                        fallbackText = `👑 **ናይ ፓራዳይስ ሆቴል AI ረዳኢ** (${currentActiveModel.fullName})\n\nብዛዕባ ሕቶኹም የቐንየልና! ናይ ሆቴልና ሪሴፕሽንን ኣቀባብላን ጋሻ ሰራሕተኛታት ንምሕጋዝኩም 24 ሰዓት ድሉዋት እዮም።`;
                         break;
                     default:
-                        responseText = 'Thank you for reaching out! Our front desk staff and concierge team are available 24/7 to assist you. You can reserve suites, order gourmet dining, book tables, or send a direct inquiry via the navigation buttons below.';
+                        fallbackText = `👑 **Paradise Concierge** (${currentActiveModel.fullName})\n\nThank you for your inquiry! Our executive concierge desk is available 24/7. You can reserve luxury suites, order gourmet dining, or book panoramic desks via the quick actions below.`;
                 }
             }
 
             setMessages((prev) => [
                 ...prev,
-                { sender: 'concierge', text: responseText }
+                {
+                    sender: 'concierge',
+                    text: fallbackText,
+                    model: selectedModel,
+                    modelName: currentActiveModel.fullName,
+                    modelColor: currentActiveModel.color
+                }
             ]);
-        }, 350);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleQuickAction = (path) => {
@@ -310,10 +376,11 @@ export default function AIConciergeWidget() {
                     id="ai-concierge-trigger"
                     className="ai-concierge-pill-btn ai-concierge-fab animate-fade-in"
                     onClick={() => setIsOpen(true)}
-                    title="Open AI Concierge"
+                    title="Open AI Concierge & Model Switcher"
                 >
                     <span className="concierge-icon">🛎️</span>
                     <span className="concierge-text">AI Concierge</span>
+                    <span className="concierge-model-mini-dot" style={{ background: activeModel.color }} />
                 </button>
             )}
 
@@ -326,27 +393,96 @@ export default function AIConciergeWidget() {
                             <LuxuryLogo size="small" showText={false} />
                             <div>
                                 <div className="concierge-brand-title">Paradise AI Concierge</div>
-                                <div className="concierge-brand-sub">Debre Markos · 24/7 Multilingual Butler</div>
+                                <div className="concierge-brand-sub">Debre Markos · 24/7 Multi-Model Butler</div>
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            className="concierge-close-btn"
-                            onClick={() => setIsOpen(false)}
-                            title="Close Concierge"
-                        >
-                            ✕
-                        </button>
+
+                        <div className="ai-concierge-header-actions">
+                            {/* Active Model Indicator Chip in Header */}
+                            <div
+                                className="concierge-header-active-chip"
+                                style={{
+                                    borderColor: activeModel.border,
+                                    background: activeModel.bgLight
+                                }}
+                                title={`Active Model: ${activeModel.fullName}`}
+                            >
+                                <span className="chip-model-icon">{activeModel.icon}</span>
+                                <span className="chip-model-name" style={{ color: activeModel.color }}>
+                                    {activeModel.name}
+                                </span>
+                            </div>
+
+                            <button
+                                type="button"
+                                className="concierge-close-btn"
+                                onClick={() => setIsOpen(false)}
+                                title="Close Concierge"
+                            >
+                                ✕
+                            </button>
+                        </div>
                     </div>
 
                     {/* Messages Body */}
                     <div className="ai-concierge-body">
-                        {messages.map((m, idx) => (
-                            <div key={idx} className={`concierge-msg ${m.sender}`}>
-                                {m.sender === 'concierge' && <span className="msg-avatar">🛎️</span>}
-                                <div className="msg-bubble" style={{ whiteSpace: 'pre-line' }}>{m.text}</div>
+                        {messages.map((m, idx) => {
+                            const msgModel = AI_MODELS.find(mod => mod.id === m.model);
+                            const modelColor = m.modelColor || msgModel?.color || '#d4af37';
+
+                            return (
+                                <div key={idx} className={`concierge-msg ${m.sender}`}>
+                                    {m.sender === 'concierge' && (
+                                        <div className="msg-avatar-wrapper" style={{ color: modelColor }}>
+                                            {msgModel ? (
+                                                <div className="msg-avatar-icon">{msgModel.icon}</div>
+                                            ) : (
+                                                <span className="msg-avatar">🛎️</span>
+                                            )}
+                                        </div>
+                                    )}
+                                    <div className="msg-bubble-container">
+                                        {m.sender === 'concierge' && (m.modelName || msgModel) && (
+                                            <div className="msg-model-tag" style={{ color: modelColor }}>
+                                                <span className="tag-dot" style={{ background: modelColor }} />
+                                                <span>{m.modelName || msgModel.fullName}</span>
+                                            </div>
+                                        )}
+                                        <div className="msg-bubble" style={{ whiteSpace: 'pre-line' }}>
+                                            {renderFormattedText(m.text)}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {/* Animated Model Thinking Indicator */}
+                        {isLoading && (
+                            <div className="concierge-msg concierge loading animate-fade-in">
+                                <div className="msg-avatar-wrapper" style={{ color: activeModel.color }}>
+                                    <div className="msg-avatar-icon">{activeModel.icon}</div>
+                                </div>
+                                <div className="msg-bubble-container">
+                                    <div
+                                        className="msg-bubble thinking-bubble"
+                                        style={{
+                                            borderColor: activeModel.border,
+                                            background: activeModel.bgLight
+                                        }}
+                                    >
+                                        <div className="thinking-dots">
+                                            <span style={{ background: activeModel.color }} />
+                                            <span style={{ background: activeModel.color }} />
+                                            <span style={{ background: activeModel.color }} />
+                                        </div>
+                                        <span className="thinking-text" style={{ color: activeModel.color }}>
+                                            {activeModel.thinkingText}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-                        ))}
+                        )}
+
                         <div ref={chatEndRef} />
                     </div>
 
@@ -371,6 +507,14 @@ export default function AIConciergeWidget() {
                         </div>
                     </div>
 
+                    {/* AI Model Switcher Bar (Pills Tabstrip) */}
+                    <AIModelSwitcher
+                        selectedModel={selectedModel}
+                        onSelectModel={setSelectedModel}
+                        disabled={isLoading}
+                        viewMode="pills"
+                    />
+
                     {/* Input Bar */}
                     <form onSubmit={handleSend} className="ai-concierge-footer">
                         <input
@@ -378,13 +522,29 @@ export default function AIConciergeWidget() {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             placeholder={
-                                lang === 'am' ? 'ጥያቄዎን እዚህ ይጠይቁ...' :
-                                (lang === 'om' ? 'Gaaffii keessan asitti barreessaa...' :
-                                (lang === 'ti' ? 'ሕቶኹም ኣብዚ ሕተቱ...' : 'Ask concierge anything...'))
+                                isLoading
+                                    ? activeModel.thinkingText
+                                    : (lang === 'am'
+                                        ? `በ ${activeModel.name} ይጠይቁ...`
+                                        : (lang === 'om'
+                                            ? `Gaaffii ${activeModel.name} gaafadhaa...`
+                                            : (lang === 'ti'
+                                                ? `ብ ${activeModel.name} ሕተቱ...`
+                                                : `Ask anything via ${activeModel.name}...`)))
                             }
                             className="concierge-input"
+                            disabled={isLoading}
                         />
-                        <button type="submit" className="concierge-send-btn" title="Send">
+                        <button
+                            type="submit"
+                            className="concierge-send-btn"
+                            title={`Send via ${activeModel.name}`}
+                            disabled={isLoading || !input.trim()}
+                            style={{
+                                opacity: isLoading || !input.trim() ? 0.6 : 1,
+                                background: activeModel.gradient
+                            }}
+                        >
                             ➔
                         </button>
                     </form>
