@@ -96,11 +96,28 @@ const ReserveRoom = () => {
       .then((res) => {
         const list = res.data.rooms || [];
         setRooms(list);
-        if (roomId) setSelectedRoomId(Number(roomId));
-        else if (list.length > 0) setSelectedRoomId(list[0].id);
+        if (roomId) {
+          setSelectedRoomId(Number(roomId));
+        } else if (list.length > 0) {
+          const firstAvail = list.find(r => r.is_available !== false && r.status !== 'booked' && r.status !== 'reserved');
+          setSelectedRoomId(firstAvail ? firstAvail.id : list[0].id);
+        }
       })
       .catch(() => toast.error('Unable to load available rooms.'));
   }, [user, location.search]);
+
+  // Dynamically re-check room availability when user changes reservation dates
+  useEffect(() => {
+    if (!checkInDate || !checkOutDate) return;
+    if (checkOutDate <= checkInDate) return;
+    api
+      .get(`/rooms/available?checkIn=${checkInDate}&checkOut=${checkOutDate}`)
+      .then((res) => {
+        const list = res.data.rooms || [];
+        setRooms(list);
+      })
+      .catch(() => {});
+  }, [checkInDate, checkOutDate]);
 
   const [scanHint, setScanHint] = useState('');
   const [autoReady, setAutoReady] = useState(0);
@@ -320,6 +337,11 @@ const ReserveRoom = () => {
   const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
 
   const selectSuiteAndScroll = (id, rm) => {
+    if (rm && (rm.is_available === false || rm.status === 'booked' || rm.status === 'reserved')) {
+      toast.error(`Suite #${rm.room_number} is currently occupied until ${rm.occupied_until || 'checkout'}. Reserving is blocked until check-out.`);
+      setRoomModal(rm);
+      return;
+    }
     setSelectedRoomId(id);
     toast.success(`Selected Room #${rm.room_number}. Please complete the reservation form below.`);
     const formElem = document.getElementById('room-booking-form-section');
@@ -344,6 +366,10 @@ const ReserveRoom = () => {
     e.preventDefault();
     if (!selectedRoomId) {
       toast.error('Please select a suite to reserve.');
+      return;
+    }
+    if (selectedRoom && (selectedRoom.is_available === false || selectedRoom.status === 'booked' || selectedRoom.status === 'reserved')) {
+      toast.error(`Suite #${selectedRoom.room_number} is currently occupied until ${selectedRoom.occupied_until || 'checkout'}. Reserving is blocked until check-out.`);
       return;
     }
     if (!checkInDate || !checkOutDate) {
@@ -552,6 +578,7 @@ const ReserveRoom = () => {
                   <LuxuryHorizontalScroll itemWidth={310} stepScroll={330}>
                     {chunk.map((rm) => {
                       const isSelected = selectedRoomId === rm.id;
+                      const isOccupied = rm.is_available === false || rm.status === 'booked' || rm.status === 'reserved';
                       const roomImg = rm.image
                         ? (rm.image.startsWith('http') ? rm.image : `/uploads/rooms/${rm.image.replace(/^.*\//, '')}`)
                         : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80';
@@ -559,8 +586,15 @@ const ReserveRoom = () => {
                         <div
                           key={rm.id}
                           className={`luxury-hscroll-card ${isSelected ? 'selected' : ''}`}
-                          onClick={() => selectSuiteAndScroll(rm.id, rm)}
-                          style={{ cursor: 'pointer' }}
+                          onClick={() => {
+                            if (isOccupied) {
+                              toast.error(`Suite #${rm.room_number} is currently occupied until ${rm.occupied_until || 'checkout'}. Reserving is blocked until check-out.`);
+                              setRoomModal(rm);
+                            } else {
+                              selectSuiteAndScroll(rm.id, rm);
+                            }
+                          }}
+                          style={{ cursor: isOccupied ? 'default' : 'pointer' }}
                         >
                           <div className="desk-img-wrap" style={{ height: 180, position: 'relative', overflow: 'hidden' }}>
                             <img
@@ -569,11 +603,17 @@ const ReserveRoom = () => {
                               onError={(e) => {
                                 e.target.src = 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80';
                               }}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: isOccupied ? 'saturate(0.8)' : undefined }}
                             />
-                            <span className="desk-status-pill">
-                              ● Available
-                            </span>
+                            {isOccupied ? (
+                              <span className="desk-status-pill" style={{ background: 'rgba(185, 28, 28, 0.92)', color: '#ffffff', border: '1px solid rgba(239, 68, 68, 0.7)', fontWeight: 800 }}>
+                                🔒 Occupied {rm.occupied_until ? `(until ${rm.occupied_until})` : ''}
+                              </span>
+                            ) : (
+                              <span className="desk-status-pill">
+                                ● Available
+                              </span>
+                            )}
                             <span style={{
                               position: 'absolute',
                               bottom: 10,
@@ -615,25 +655,52 @@ const ReserveRoom = () => {
                               >
                                 Details
                               </button>
-                              <button
-                                type="button"
-                                className="auth-gold-submit-btn"
-                                style={{
-                                  padding: '7px 14px',
-                                  fontSize: 12,
-                                  width: 'auto',
-                                  flex: 1,
-                                  margin: 0,
-                                  background: isSelected ? 'linear-gradient(135deg, #27ae60 0%, #219150 100%)' : undefined,
-                                  color: isSelected ? '#ffffff' : undefined,
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  selectSuiteAndScroll(rm.id, rm);
-                                }}
-                              >
-                                {isSelected ? '✓ Selected' : 'Select Suite ➔'}
-                              </button>
+                              {isOccupied ? (
+                                <button
+                                  type="button"
+                                  className="auth-gold-submit-btn"
+                                  style={{
+                                    padding: '7px 14px',
+                                    fontSize: 12,
+                                    width: 'auto',
+                                    flex: 1,
+                                    margin: 0,
+                                    background: '#334155',
+                                    color: '#94a3b8',
+                                    border: '1px solid #475569',
+                                    cursor: 'not-allowed',
+                                    opacity: 0.85
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toast.error(`Suite #${rm.room_number} is currently occupied until ${rm.occupied_until || 'checkout'}. Reserving is blocked until check-out.`);
+                                    setRoomModal(rm);
+                                  }}
+                                  title="Occupied — blocked until checkout"
+                                >
+                                  🔒 Occupied
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="auth-gold-submit-btn"
+                                  style={{
+                                    padding: '7px 14px',
+                                    fontSize: 12,
+                                    width: 'auto',
+                                    flex: 1,
+                                    margin: 0,
+                                    background: isSelected ? 'linear-gradient(135deg, #27ae60 0%, #219150 100%)' : undefined,
+                                    color: isSelected ? '#ffffff' : undefined,
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    selectSuiteAndScroll(rm.id, rm);
+                                  }}
+                                >
+                                  {isSelected ? '✓ Selected' : 'Select Suite ➔'}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -927,6 +994,30 @@ const ReserveRoom = () => {
           </div>
 
           {/* Row 5: Pricing Breakdown & Submit Bar (Matching Desks & Food) */}
+          {selectedRoom && (selectedRoom.is_available === false || selectedRoom.status === 'booked' || selectedRoom.status === 'reserved') && (
+            <div style={{
+              padding: '14px 18px',
+              marginBottom: 16,
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1.5px solid rgba(239, 68, 68, 0.5)',
+              borderRadius: 12,
+              color: '#ef4444',
+              fontWeight: 700,
+              fontSize: 14,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12
+            }}>
+              <span style={{ fontSize: 24 }}>🔒</span>
+              <div>
+                <div>Suite #{selectedRoom.room_number} is currently occupied {selectedRoom.occupied_until ? `until ${selectedRoom.occupied_until}` : ''}.</div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Another guest is currently staying in this suite. Reserving is blocked until check-out. Please select an available suite from the shelves above.
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{
             background: 'var(--bg-main)',
             border: '1px solid var(--border)',
@@ -985,10 +1076,27 @@ const ReserveRoom = () => {
             <button
               type="submit"
               className="auth-gold-submit-btn"
-              disabled={submitting}
-              style={{ width: 'auto', minWidth: 260, padding: '14px 28px', margin: 0, fontSize: 15 }}
+              disabled={submitting || (selectedRoom && (selectedRoom.is_available === false || selectedRoom.status === 'booked' || selectedRoom.status === 'reserved'))}
+              style={{
+                width: 'auto',
+                minWidth: 260,
+                padding: '14px 28px',
+                margin: 0,
+                fontSize: 15,
+                ...(selectedRoom && (selectedRoom.is_available === false || selectedRoom.status === 'booked' || selectedRoom.status === 'reserved') ? {
+                  background: '#334155',
+                  color: '#94a3b8',
+                  border: '1px solid #475569',
+                  cursor: 'not-allowed',
+                  opacity: 0.85
+                } : {})
+              }}
             >
-              {submitting ? 'Verifying & Reserving Suite…' : '👑 Confirm Suite & Pay ➔'}
+              {submitting
+                ? 'Verifying & Reserving Suite…'
+                : (selectedRoom && (selectedRoom.is_available === false || selectedRoom.status === 'booked' || selectedRoom.status === 'reserved')
+                  ? '🔒 Suite Occupied (Blocked)'
+                  : '👑 Confirm Suite & Pay ➔')}
             </button>
           </div>
         </form>
@@ -1016,17 +1124,31 @@ const ReserveRoom = () => {
               <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>
                 {formatPrice(roomModal.price_per_night || 0)} / night
               </span>
-              <button
-                type="button"
-                className="auth-gold-submit-btn"
-                style={{ width: 'auto', padding: '9px 18px' }}
-                onClick={() => {
-                  selectSuiteAndScroll(roomModal.id, roomModal);
-                  setRoomModal(null);
-                }}
-              >
-                Select This Suite
-              </button>
+              {roomModal.is_available === false || roomModal.status === 'booked' || roomModal.status === 'reserved' ? (
+                <span style={{
+                  padding: '9px 18px',
+                  borderRadius: 10,
+                  background: '#334155',
+                  color: '#94a3b8',
+                  border: '1px solid #475569',
+                  fontSize: 13,
+                  fontWeight: 700
+                }}>
+                  🔒 Occupied until {roomModal.occupied_until || 'checkout'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="auth-gold-submit-btn"
+                  style={{ width: 'auto', padding: '9px 18px' }}
+                  onClick={() => {
+                    selectSuiteAndScroll(roomModal.id, roomModal);
+                    setRoomModal(null);
+                  }}
+                >
+                  Select This Suite
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -51,37 +51,109 @@ async function releaseExpiredRooms() {
     try {
         await rejectUnpaidRoomReservations();
 
-        // Checkout date reached → mark stay finished
-        const [result] = await db.execute(
+        // 1. Checkout date reached → mark stay finished
+        await db.execute(
             `UPDATE room_reservations
              SET status = 'checked_out'
              WHERE status IN ('pending', 'approved', 'checked_in')
                AND DATE(check_out_date) <= CURDATE()`
         );
 
-        // Any room with no active paid occupancy → available
+        // 2. Mark rooms with active stay today as 'booked'
+        try {
+            await db.execute(
+                `UPDATE rooms r
+                 SET r.status = 'booked'
+                 WHERE COALESCE(r.status, '') <> 'maintenance'
+                   AND EXISTS (
+                     SELECT 1 FROM room_reservations rr
+                     WHERE rr.room_id = r.id
+                       AND rr.status NOT IN ('cancelled', 'rejected', 'checked_out')
+                       AND (
+                         (rr.status IN ('approved', 'checked_in') AND rr.payment_status = 'paid')
+                         OR
+                         (rr.status IN ('pending', 'awaiting_payment') AND rr.reservation_date >= (NOW() - INTERVAL 20 MINUTE))
+                       )
+                       AND DATE(rr.check_in_date) <= CURDATE()
+                       AND DATE(rr.check_out_date) > CURDATE()
+                   )`
+            );
+        } catch (e1) {
+            console.error('mark active room status:', e1.message);
+        }
+
+        // 3. Any room with NO active stay today → available
         try {
             await db.execute(
                 `UPDATE rooms r
                  SET r.status = 'available'
-                 WHERE COALESCE(r.status, 'available') IN ('booked', 'reserved', 'available')
+                 WHERE COALESCE(r.status, 'available') IN ('booked', 'reserved')
                    AND COALESCE(r.status, '') <> 'maintenance'
                    AND NOT EXISTS (
                      SELECT 1 FROM room_reservations rr
                      WHERE rr.room_id = r.id
-                       AND rr.status IN ('approved', 'checked_in')
-                       AND rr.payment_status = 'paid'
+                       AND rr.status NOT IN ('cancelled', 'rejected', 'checked_out')
+                       AND (
+                         (rr.status IN ('approved', 'checked_in') AND rr.payment_status = 'paid')
+                         OR
+                         (rr.status IN ('pending', 'awaiting_payment') AND rr.reservation_date >= (NOW() - INTERVAL 20 MINUTE))
+                       )
+                       AND DATE(rr.check_in_date) <= CURDATE()
                        AND DATE(rr.check_out_date) > CURDATE()
                    )`
             );
         } catch (e2) {
             console.error('free room status:', e2.message);
         }
-
-        return result;
     } catch (e) {
         console.error('releaseExpiredRooms:', e.message);
     }
+}
+
+// Decorate room with availability and checkout details while keeping ALL rooms visible
+function decorateRoomAvailability(room, activeReservations, checkIn, checkOut) {
+    const isMaintenance = room.status === 'maintenance';
+    let overlapping = null;
+
+    if (checkIn && checkOut) {
+        overlapping = activeReservations.find(rr => {
+            if (Number(rr.room_id) !== Number(room.id)) return false;
+            const rIn = new Date(rr.check_in_date).toISOString().slice(0, 10);
+            const rOut = new Date(rr.check_out_date).toISOString().slice(0, 10);
+            return rIn < checkOut && rOut > checkIn;
+        });
+    } else {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        overlapping = activeReservations.find(rr => {
+            if (Number(rr.room_id) !== Number(room.id)) return false;
+            const rIn = new Date(rr.check_in_date).toISOString().slice(0, 10);
+            const rOut = new Date(rr.check_out_date).toISOString().slice(0, 10);
+            return rIn <= todayStr && rOut > todayStr;
+        });
+        if (!overlapping && (room.status === 'booked' || room.status === 'reserved')) {
+            overlapping = activeReservations.find(rr => Number(rr.room_id) === Number(room.id));
+        }
+    }
+
+    const isAvailable = !isMaintenance && !overlapping;
+    const norm = normalizeRoomImage({ ...room });
+    norm.is_available = isAvailable;
+    norm.status = isMaintenance ? 'maintenance' : (!isAvailable ? 'booked' : 'available');
+
+    if (overlapping) {
+        const outDateStr = new Date(overlapping.check_out_date).toISOString().slice(0, 10);
+        norm.occupied_until = outDateStr;
+        norm.current_reservation = {
+            id: overlapping.id,
+            check_in_date: new Date(overlapping.check_in_date).toISOString().slice(0, 10),
+            check_out_date: outDateStr,
+            status: overlapping.status
+        };
+    } else {
+        norm.occupied_until = null;
+        norm.current_reservation = null;
+    }
+    return norm;
 }
 
 // Export for server.js interval
@@ -90,8 +162,23 @@ router.releaseExpiredRooms = releaseExpiredRooms;
 router.get('/', async (req, res) => {
     try {
         await releaseExpiredRooms();
-        const [rooms] = await db.execute('SELECT * FROM rooms ORDER BY room_number');
-        res.json({ success: true, rooms: rooms.map(normalizeRoomImage) });
+        const [rooms] = await db.execute('SELECT * FROM rooms ORDER BY id DESC, room_number ASC');
+        const [activeReservations] = await db.execute(
+            `SELECT id, room_id, check_in_date, check_out_date, status, payment_status, guest_name
+             FROM room_reservations
+             WHERE status NOT IN ('cancelled', 'rejected', 'checked_out')
+               AND (
+                 (status IN ('approved', 'checked_in') AND payment_status = 'paid')
+                 OR
+                 (status IN ('pending', 'awaiting_payment') AND reservation_date >= (NOW() - INTERVAL 20 MINUTE))
+               )
+               AND DATE(check_out_date) > CURDATE()
+             ORDER BY check_in_date ASC`
+        );
+        res.json({
+            success: true,
+            rooms: rooms.map(r => decorateRoomAvailability(r, activeReservations))
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -100,44 +187,35 @@ router.get('/', async (req, res) => {
 router.get('/available', async (req, res) => {
     try {
         await releaseExpiredRooms();
-        let checkIn = req.query.checkIn || req.query.check_in || new Date().toISOString().slice(0, 10);
+        let checkIn = req.query.checkIn || req.query.check_in;
         let checkOut = req.query.checkOut || req.query.check_out;
-        if (!checkOut) {
+        if (checkIn && !checkOut) {
             const d = new Date(checkIn);
             d.setDate(d.getDate() + 1);
             checkOut = d.toISOString().slice(0, 10);
         }
-        // Room is free unless there is a paid stay overlapping the requested window
-        // and still before/on active period (checkout date not yet reached)
-        const [rooms] = await db.execute(
-            `SELECT r.* FROM rooms r
-             WHERE (r.status IS NULL OR r.status NOT IN ('maintenance'))
-               AND r.id NOT IN (
-                 SELECT rr.room_id FROM room_reservations rr
-                 WHERE rr.room_id IS NOT NULL
-                   AND (
-                     (
-                       rr.status IN ('approved', 'checked_in')
-                       AND rr.payment_status = 'paid'
-                       AND DATE(rr.check_out_date) > CURDATE()
-                       AND rr.check_in_date < ?
-                       AND rr.check_out_date > ?
-                     )
-                     OR
-                     (
-                       rr.status = 'pending'
-                       AND (rr.payment_status IS NULL OR rr.payment_status = 'pending')
-                       AND rr.reservation_date >= (NOW() - INTERVAL 20 MINUTE)
-                       AND DATE(rr.check_out_date) > CURDATE()
-                       AND rr.check_in_date < ?
-                       AND rr.check_out_date > ?
-                     )
-                   )
+
+        // Return ALL rooms with calculated availability so occupied rooms remain visible but blocked
+        const [rooms] = await db.execute('SELECT * FROM rooms ORDER BY id DESC, room_number ASC');
+        const [activeReservations] = await db.execute(
+            `SELECT id, room_id, check_in_date, check_out_date, status, payment_status, guest_name
+             FROM room_reservations
+             WHERE status NOT IN ('cancelled', 'rejected', 'checked_out')
+               AND (
+                 (status IN ('approved', 'checked_in') AND payment_status = 'paid')
+                 OR
+                 (status IN ('pending', 'awaiting_payment') AND reservation_date >= (NOW() - INTERVAL 20 MINUTE))
                )
-             ORDER BY r.id DESC, r.room_number`,
-            [checkOut, checkIn, checkOut, checkIn]
+               AND DATE(check_out_date) > CURDATE()
+             ORDER BY check_in_date ASC`
         );
-        res.json({ success: true, rooms: (rooms || []).map(normalizeRoomImage), checkIn, checkOut });
+
+        res.json({
+            success: true,
+            rooms: rooms.map(r => decorateRoomAvailability(r, activeReservations, checkIn, checkOut)),
+            checkIn,
+            checkOut
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

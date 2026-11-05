@@ -84,10 +84,28 @@ export default function ReserveDesk() {
       .then((res) => {
         const list = res.data.desks || [];
         setDesks(list);
-        if (list.length > 0 && user) setSelectedDeskId(list[0].id);
+        if (list.length > 0 && user) {
+          const firstAvail = list.find(d => d.is_available !== false && d.status !== 'reserved' && d.status !== 'booked');
+          setSelectedDeskId(firstAvail ? firstAvail.id : list[0].id);
+        }
       })
       .catch(console.error);
   }, [user]);
+
+  // Dynamically re-check desk availability when user changes date or time slot
+  useEffect(() => {
+    if (!date || !startTime || !endTime) return;
+    const s = new Date(`${date}T${startTime}`);
+    const e = new Date(`${date}T${endTime}`);
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return;
+
+    api.get(`/desks/available?date=${date}&startTime=${startTime}&endTime=${endTime}`)
+      .then((res) => {
+        const list = res.data.desks || [];
+        setDesks(list);
+      })
+      .catch(console.error);
+  }, [date, startTime, endTime]);
 
   const locations = ['All', ...Array.from(new Set(desks.map(d => d.location || 'Main Dining Hall')))];
 
@@ -106,6 +124,12 @@ export default function ReserveDesk() {
     if (!user) {
       toast.error('Please log in to select a desk.');
       navigate('/login');
+      return;
+    }
+    if (deskObj && (deskObj.is_available === false || deskObj.status === 'reserved' || deskObj.status === 'booked')) {
+      const untilStr = deskObj.occupied_until ? ` until ${typeof deskObj.occupied_until === 'string' && deskObj.occupied_until.includes('T') ? new Date(deskObj.occupied_until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : deskObj.occupied_until}` : '';
+      toast.error(`Desk #${deskObj.desk_number} is currently reserved${untilStr}. Reserving is blocked until it is released.`);
+      setDetailsModal(deskObj);
       return;
     }
     setSelectedDeskId(deskId);
@@ -148,6 +172,10 @@ export default function ReserveDesk() {
     }
     if (!selectedDeskId) {
       toast.error('Please choose a dining desk from the list.');
+      return;
+    }
+    if (selectedDesk && (selectedDesk.is_available === false || selectedDesk.status === 'reserved' || selectedDesk.status === 'booked')) {
+      toast.error(`Desk #${selectedDesk.desk_number} is currently reserved. Reserving is blocked until it is released.`);
       return;
     }
     if (!date || !startTime || !endTime) {
@@ -355,12 +383,21 @@ export default function ReserveDesk() {
                     {chunk.map((d) => {
                       const img = resolveMediaUrl(d.image, 'desks');
                       const isSelected = selectedDeskId === d.id;
+                      const isOccupied = d.is_available === false || d.status === 'reserved' || d.status === 'booked';
+                      const untilStr = d.occupied_until ? (typeof d.occupied_until === 'string' && d.occupied_until.includes('T') ? new Date(d.occupied_until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.occupied_until) : '';
                       return (
                         <div
                           key={d.id}
                           className={`luxury-hscroll-card ${isSelected ? 'selected' : ''}`}
-                          onClick={() => selectDesk(d.id, d)}
-                          style={{ cursor: 'pointer' }}
+                          onClick={() => {
+                            if (isOccupied) {
+                              toast.error(`Desk #${d.desk_number} is currently reserved${untilStr ? ' until ' + untilStr : ''}. Reserving is blocked until it is released.`);
+                              setDetailsModal(d);
+                            } else {
+                              selectDesk(d.id, d);
+                            }
+                          }}
+                          style={{ cursor: isOccupied ? 'default' : 'pointer' }}
                         >
                           <div className="desk-img-wrap" style={{ height: 180, position: 'relative', overflow: 'hidden' }}>
                             <img
@@ -369,11 +406,17 @@ export default function ReserveDesk() {
                               onError={(e) => {
                                 e.target.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=80';
                               }}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: isOccupied ? 'saturate(0.8)' : undefined }}
                             />
-                            <span className="desk-status-pill">
-                              ● {d.status === 'available' ? 'Available' : d.status}
-                            </span>
+                            {isOccupied ? (
+                              <span className="desk-status-pill" style={{ background: 'rgba(185, 28, 28, 0.92)', color: '#ffffff', border: '1px solid rgba(239, 68, 68, 0.7)', fontWeight: 800 }}>
+                                🔒 Reserved {untilStr ? `(until ${untilStr})` : ''}
+                              </span>
+                            ) : (
+                              <span className="desk-status-pill">
+                                ● Available
+                              </span>
+                            )}
                             <span style={{
                               position: 'absolute',
                               bottom: 8,
@@ -421,25 +464,52 @@ export default function ReserveDesk() {
                               >
                                 Details
                               </button>
-                              <button
-                                type="button"
-                                className="auth-gold-submit-btn"
-                                style={{
-                                  padding: '7px 14px',
-                                  fontSize: 12,
-                                  width: 'auto',
-                                  flex: 1,
-                                  margin: 0,
-                                  background: isSelected ? 'linear-gradient(135deg, #27ae60 0%, #219150 100%)' : undefined,
-                                  color: isSelected ? '#ffffff' : undefined,
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  selectDesk(d.id, d);
-                                }}
-                              >
-                                {isSelected ? '✓ Selected' : 'Select Table ➔'}
-                              </button>
+                              {isOccupied ? (
+                                <button
+                                  type="button"
+                                  className="auth-gold-submit-btn"
+                                  style={{
+                                    padding: '7px 14px',
+                                    fontSize: 12,
+                                    width: 'auto',
+                                    flex: 1,
+                                    margin: 0,
+                                    background: '#334155',
+                                    color: '#94a3b8',
+                                    border: '1px solid #475569',
+                                    cursor: 'not-allowed',
+                                    opacity: 0.85
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toast.error(`Desk #${d.desk_number} is currently reserved. Reserving is blocked until it is released.`);
+                                    setDetailsModal(d);
+                                  }}
+                                  title="Reserved — blocked until released"
+                                >
+                                  🔒 Reserved
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="auth-gold-submit-btn"
+                                  style={{
+                                    padding: '7px 14px',
+                                    fontSize: 12,
+                                    width: 'auto',
+                                    flex: 1,
+                                    margin: 0,
+                                    background: isSelected ? 'linear-gradient(135deg, #27ae60 0%, #219150 100%)' : undefined,
+                                    color: isSelected ? '#ffffff' : undefined,
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    selectDesk(d.id, d);
+                                  }}
+                                >
+                                  {isSelected ? '✓ Selected' : 'Select Table ➔'}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -606,6 +676,30 @@ export default function ReserveDesk() {
           </div>
 
           {/* Row 4: Pricing Summary & Confirm Button Bar */}
+          {selectedDesk && (selectedDesk.is_available === false || selectedDesk.status === 'reserved' || selectedDesk.status === 'booked') && (
+            <div style={{
+              padding: '14px 18px',
+              marginBottom: 16,
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1.5px solid rgba(239, 68, 68, 0.5)',
+              borderRadius: 12,
+              color: '#ef4444',
+              fontWeight: 700,
+              fontSize: 14,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12
+            }}>
+              <span style={{ fontSize: 24 }}>🔒</span>
+              <div>
+                <div>Desk #{selectedDesk.desk_number} is currently reserved / occupied.</div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Another customer has reserved this table. Reserving is blocked until it is released. Please select an available table from the shelves above.
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{
             background: 'var(--bg-main)',
             border: '1px solid var(--border)',
@@ -655,10 +749,27 @@ export default function ReserveDesk() {
             <button
               type="submit"
               className="auth-gold-submit-btn"
-              disabled={loading}
-              style={{ width: 'auto', minWidth: 260, padding: '14px 28px', margin: 0, fontSize: 15 }}
+              disabled={loading || (selectedDesk && (selectedDesk.is_available === false || selectedDesk.status === 'reserved' || selectedDesk.status === 'booked'))}
+              style={{
+                width: 'auto',
+                minWidth: 260,
+                padding: '14px 28px',
+                margin: 0,
+                fontSize: 15,
+                ...(selectedDesk && (selectedDesk.is_available === false || selectedDesk.status === 'reserved' || selectedDesk.status === 'booked') ? {
+                  background: '#334155',
+                  color: '#94a3b8',
+                  border: '1px solid #475569',
+                  cursor: 'not-allowed',
+                  opacity: 0.85
+                } : {})
+              }}
             >
-              {loading ? 'Confirming Table…' : (withFood ? '🍽️ Reserve Free Desk & Order Food ➔' : '🍽️ Confirm Table & Pay ➔')}
+              {loading
+                ? 'Confirming Table…'
+                : (selectedDesk && (selectedDesk.is_available === false || selectedDesk.status === 'reserved' || selectedDesk.status === 'booked')
+                  ? '🔒 Table Reserved (Blocked)'
+                  : (withFood ? '🍽️ Reserve Free Desk & Order Food ➔' : '🍽️ Confirm Table & Pay ➔'))}
             </button>
           </div>
         </form>
@@ -684,17 +795,31 @@ export default function ReserveDesk() {
               <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>
                 {formatPrice(detailsModal.discounted_price || detailsModal.price || 0)} / hour
               </span>
-              <button
-                type="button"
-                className="auth-gold-submit-btn"
-                style={{ width: 'auto', padding: '9px 18px' }}
-                onClick={() => {
-                  selectDesk(detailsModal.id);
-                  setDetailsModal(null);
-                }}
-              >
-                Select This Desk
-              </button>
+              {detailsModal.is_available === false || detailsModal.status === 'reserved' || detailsModal.status === 'booked' ? (
+                <span style={{
+                  padding: '9px 18px',
+                  borderRadius: 10,
+                  background: '#334155',
+                  color: '#94a3b8',
+                  border: '1px solid #475569',
+                  fontSize: 13,
+                  fontWeight: 700
+                }}>
+                  🔒 Reserved (Unavailable)
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="auth-gold-submit-btn"
+                  style={{ width: 'auto', padding: '9px 18px' }}
+                  onClick={() => {
+                    selectDesk(detailsModal.id, detailsModal);
+                    setDetailsModal(null);
+                  }}
+                >
+                  Select This Desk
+                </button>
+              )}
             </div>
           </div>
         </div>

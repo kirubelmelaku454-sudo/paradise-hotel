@@ -11,14 +11,39 @@ const { uploadDeskImage } = require('../middleware/upload');
 // Complete past reservations; availability is computed from time periods (not permanent flags)
 async function releaseExpiredDesks() {
     try {
+        // Complete past reservations where end_time has passed
         await db.execute(
             `UPDATE desk_reservations SET status = 'completed'
              WHERE status IN ('approved', 'awaiting_payment')
-               AND end_time IS NOT NULL AND end_time < NOW()`
+               AND end_time IS NOT NULL AND end_time <= NOW()`
         );
+        // Expire unpaid pending desk reservations older than 20 minutes
+        try {
+            await db.execute(
+                `UPDATE desk_reservations SET status = 'rejected',
+                        rejection_reason = COALESCE(rejection_reason, 'Payment window expired')
+                 WHERE status = 'awaiting_payment'
+                   AND (payment_status IS NULL OR payment_status IN ('pending', 'unpaid', 'failed'))
+                   AND created_at < (NOW() - INTERVAL 20 MINUTE)`
+            );
+        } catch (_) {}
+
+        // Mark desks with currently active reservations as 'reserved'
+        await db.execute(
+            `UPDATE desks SET status = 'reserved'
+             WHERE COALESCE(status, '') <> 'maintenance'
+               AND id IN (
+                 SELECT desk_id FROM desk_reservations
+                 WHERE status IN ('approved', 'awaiting_payment')
+                   AND start_time <= NOW() AND end_time > NOW()
+               )`
+        );
+
+        // Mark desks with NO active reservation as 'available'
         await db.execute(
             `UPDATE desks SET status = 'available'
              WHERE status IN ('reserved', 'booked')
+               AND COALESCE(status, '') <> 'maintenance'
                AND id NOT IN (
                  SELECT desk_id FROM desk_reservations
                  WHERE status IN ('approved', 'awaiting_payment')
@@ -30,13 +55,67 @@ async function releaseExpiredDesks() {
     }
 }
 
-// Get all desks (with active discounts on price)
+// Helper to decorate desk availability while keeping ALL 30 desks visible on shelves
+function decorateDeskAvailability(d, activeReservations, rangeStart, rangeEnd, discounts) {
+    const item = decorateItem(d, 'desk', discounts);
+    let overlappingRes = null;
+    const now = new Date();
+
+    if (rangeStart && rangeEnd && !isNaN(rangeStart.getTime()) && !isNaN(rangeEnd.getTime())) {
+        overlappingRes = activeReservations.find((r) => {
+            if (Number(r.desk_id) !== Number(d.id)) return false;
+            const rStart = new Date(r.start_time);
+            const rEnd = new Date(r.end_time);
+            return rStart < rangeEnd && rEnd > rangeStart;
+        });
+    } else {
+        overlappingRes = activeReservations.find((r) => {
+            if (Number(r.desk_id) !== Number(d.id)) return false;
+            const rStart = new Date(r.start_time);
+            const rEnd = new Date(r.end_time);
+            return rStart <= now && rEnd > now;
+        });
+        if (!overlappingRes && (d.status === 'reserved' || d.status === 'booked')) {
+            overlappingRes = activeReservations.find((r) => Number(r.desk_id) === Number(d.id));
+        }
+    }
+
+    const isMaintenance = d.status === 'maintenance';
+    const isReserved = !!overlappingRes || d.status === 'reserved' || d.status === 'booked';
+    item.is_available = !isMaintenance && !isReserved;
+    item.status = isMaintenance ? 'maintenance' : (isReserved ? 'reserved' : 'available');
+
+    if (overlappingRes) {
+        item.occupied_until = overlappingRes.end_time;
+        item.current_reservation = {
+            id: overlappingRes.id,
+            start_time: overlappingRes.start_time,
+            end_time: overlappingRes.end_time,
+            reservation_date: overlappingRes.reservation_date
+        };
+    } else {
+        item.occupied_until = null;
+        item.current_reservation = null;
+    }
+    return item;
+}
+
+// Get all desks (with active discounts and current availability)
 router.get('/', async (req, res) => {
     try {
         await releaseExpiredDesks();
-        const [desks] = await db.execute('SELECT * FROM desks ORDER BY id DESC, desk_number');
+        const [desks] = await db.execute('SELECT * FROM desks ORDER BY id DESC, desk_number ASC');
+        const [activeReservations] = await db.execute(
+            `SELECT id, desk_id, start_time, end_time, reservation_date, status, payment_status, guest_name
+             FROM desk_reservations
+             WHERE status IN ('awaiting_payment', 'approved')
+               AND desk_id IS NOT NULL
+               AND (end_time IS NULL OR end_time > NOW())
+             ORDER BY start_time ASC`
+        );
         const discounts = await getActiveDiscounts();
-        res.json({ success: true, desks: (desks || []).map((d) => decorateItem(d, 'desk', discounts)) });
+        const decorated = (desks || []).map((d) => decorateDeskAvailability(d, activeReservations, null, null, discounts));
+        res.json({ success: true, desks: decorated });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -45,8 +124,7 @@ router.get('/', async (req, res) => {
 /**
  * Available desks for an optional time window.
  * Query: date (YYYY-MM-DD), startTime (HH:MM), endTime (HH:MM)
- * If omitted, excludes only desks currently in an active reservation period.
- * Overlap rule: requestedStart < existingEnd AND requestedEnd > existingStart
+ * Returns ALL desks with is_available calculated so reserved tables stay visible but blocked.
  */
 router.get('/available', async (req, res) => {
     try {
@@ -66,35 +144,19 @@ router.get('/available', async (req, res) => {
             }
         }
 
-        let sql;
-        let params = [];
-        if (rangeStart && rangeEnd) {
-            sql = `SELECT d.* FROM desks d
-                   WHERE (d.status IS NULL OR d.status NOT IN ('maintenance'))
-                     AND d.id NOT IN (
-                       SELECT desk_id FROM desk_reservations
-                       WHERE status IN ('awaiting_payment', 'approved')
-                         AND desk_id IS NOT NULL
-                         AND start_time < ? AND end_time > ?
-                     )
-                   ORDER BY d.id DESC, d.desk_number`;
-            params = [rangeEnd, rangeStart];
-        } else {
-            // Currently free (not in active reservation right now)
-            sql = `SELECT d.* FROM desks d
-                   WHERE (d.status IS NULL OR d.status NOT IN ('maintenance'))
-                     AND d.id NOT IN (
-                       SELECT desk_id FROM desk_reservations
-                       WHERE status IN ('awaiting_payment', 'approved')
-                         AND desk_id IS NOT NULL
-                         AND start_time <= NOW() AND end_time > NOW()
-                     )
-                   ORDER BY d.id DESC, d.desk_number`;
-        }
+        const [desks] = await db.execute('SELECT * FROM desks ORDER BY id DESC, desk_number ASC');
+        const [activeReservations] = await db.execute(
+            `SELECT id, desk_id, start_time, end_time, reservation_date, status, payment_status, guest_name
+             FROM desk_reservations
+             WHERE status IN ('awaiting_payment', 'approved')
+               AND desk_id IS NOT NULL
+               AND (end_time IS NULL OR end_time > NOW())
+             ORDER BY start_time ASC`
+        );
 
-        const [desks] = await db.execute(sql, params);
         const discounts = await getActiveDiscounts();
-        res.json({ success: true, desks: (desks || []).map((d) => decorateItem(d, 'desk', discounts)) });
+        const decorated = (desks || []).map((d) => decorateDeskAvailability(d, activeReservations, rangeStart, rangeEnd, discounts));
+        res.json({ success: true, desks: decorated });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -285,16 +347,26 @@ router.post('/reserve', auth, async (req, res) => {
             return res.status(404).json({ success: false, message: 'Desk not found' });
         }
 
+        await releaseExpiredDesks();
+
         // Check overlapping desk reservations
         const [overlaps] = await db.execute(
-            `SELECT id FROM desk_reservations
+            `SELECT id, start_time, end_time FROM desk_reservations
              WHERE desk_id = ?
-               AND status IN ('awaiting_payment', 'approved')
-               AND (start_time < ? AND end_time > ?)`,
+               AND status NOT IN ('cancelled', 'rejected', 'completed')
+               AND (
+                 status = 'approved'
+                 OR (status = 'awaiting_payment' AND created_at >= (NOW() - INTERVAL 20 MINUTE))
+               )
+               AND (start_time < ? AND end_time > ?)
+             LIMIT 1`,
             [deskId, endDateTime, startDateTime]
         );
         if (overlaps.length > 0) {
-            return res.status(400).json({ success: false, message: 'This desk is already booked during the selected period. Please choose another desk or time.' });
+            return res.status(400).json({
+                success: false,
+                message: `Desk #${desk[0].desk_number} is already reserved during the selected time. Reserving is blocked until it is released. Please choose another table or time.`
+            });
         }
 
         // Get or create customer
@@ -385,12 +457,15 @@ router.post('/reserve', auth, async (req, res) => {
                 `UPDATE desk_reservations SET status = 'approved', payment_status = 'paid' WHERE id = ?`,
                 [result.insertId]
             );
-            // Mark inventory reserved only while the period is currently active
+        }
+
+        // Mark inventory reserved if this reservation window is currently active
+        try {
             await db.execute(
-                `UPDATE desks SET status = IF(? <= NOW() AND ? > NOW(), 'reserved', 'available') WHERE id = ?`,
+                `UPDATE desks SET status = IF(? <= NOW() AND ? > NOW(), 'reserved', status) WHERE id = ? AND status <> 'maintenance'`,
                 [startDateTime, endDateTime, deskId]
             );
-        }
+        } catch (_) {}
 
         await logAuditAction(req.user.id, req.user.role, 'CREATE_DESK_RESERVATION', 'desk', result.insertId, {
             deskId,
@@ -598,3 +673,4 @@ router.delete('/:id/image', auth, authorize('admin', 'manager'), async (req, res
 
 
 module.exports = router;
+module.exports.releaseExpiredDesks = releaseExpiredDesks;

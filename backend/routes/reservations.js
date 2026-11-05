@@ -276,19 +276,30 @@ router.post('/', auth, (req, res, next) => {
             });
         }
 
+        const { releaseExpiredRooms } = require('./rooms');
+        if (typeof releaseExpiredRooms === 'function') {
+            await releaseExpiredRooms().catch(() => {});
+        }
+
         const [overlaps] = await db.execute(
-            `SELECT id FROM room_reservations
+            `SELECT id, check_in_date, check_out_date, status, payment_status FROM room_reservations
              WHERE room_id = ?
-               AND status IN ('approved', 'checked_in')
-               AND payment_status = 'paid'
-               AND (check_in_date < ? AND check_out_date > ?)`,
+               AND status NOT IN ('cancelled', 'rejected', 'checked_out')
+               AND (
+                 status IN ('approved', 'checked_in')
+                 OR payment_status = 'paid'
+                 OR (status IN ('pending', 'awaiting_payment') AND reservation_date >= (NOW() - INTERVAL 20 MINUTE))
+               )
+               AND (check_in_date < ? AND check_out_date > ?)
+             LIMIT 1`,
             [roomId, checkOutDate, checkInDate]
         );
         if (overlaps.length > 0) {
+            const inStr = new Date(overlaps[0].check_in_date).toISOString().slice(0, 10);
+            const outStr = new Date(overlaps[0].check_out_date).toISOString().slice(0, 10);
             return res.status(400).json({
                 success: false,
-                message:
-                    'This room is already reserved during the selected date and time. Please select another time or another room.',
+                message: `Room #${room.room_number} is already reserved from ${inStr} to ${outStr}. Reserving is blocked until check-out. Please select another room or different dates.`,
             });
         }
 
@@ -432,6 +443,14 @@ router.post('/', auth, (req, res, next) => {
                 ]
             );
             insertId = resResult.insertId;
+        }
+
+        // If reservation covers today, immediately mark room as booked
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (checkInDate <= todayStr && checkOutDate > todayStr) {
+            try {
+                await db.execute("UPDATE rooms SET status = 'booked' WHERE id = ? AND status <> 'maintenance'", [roomId]);
+            } catch (_) { }
         }
 
         try {

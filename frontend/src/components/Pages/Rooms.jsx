@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import api from '../../api';
 import LuxuryHorizontalScroll from '../Common/LuxuryHorizontalScroll';
 import { SkeletonGrid } from '../Common/SkeletonLoader';
@@ -95,7 +96,15 @@ export default function Rooms() {
     return true;
   });
 
-  const handleApply = (roomId) => navigate(`/reserve-room?roomId=${roomId}`);
+  const handleApply = (roomId) => {
+    const rm = rooms.find(r => r.id === roomId);
+    if (rm && (rm.is_available === false || rm.status === 'booked' || rm.status === 'reserved')) {
+      toast.error(`Suite #${rm.room_number} is currently occupied until ${rm.occupied_until || 'checkout'}. Reserving is blocked until check-out.`);
+      setDetailsModal(rm);
+      return;
+    }
+    navigate(`/reserve-room?roomId=${roomId}`);
+  };
 
   return (
     <div className="inside" style={{ maxWidth: 1240, margin: '0 auto', padding: '24px 20px' }}>
@@ -246,12 +255,20 @@ export default function Rooms() {
                 <LuxuryHorizontalScroll itemWidth={310} stepScroll={330}>
                   {chunk.map((room) => {
                     const img = resolveImg(room.image);
+                    const isOccupied = room.is_available === false || room.status === 'booked' || room.status === 'reserved';
                     return (
                       <div
                         key={room.id}
                         className="luxury-hscroll-card"
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => handleApply(room.id)}
+                        style={{ cursor: isOccupied ? 'default' : 'pointer' }}
+                        onClick={() => {
+                          if (isOccupied) {
+                            toast.error(`Suite #${room.room_number} is occupied until ${room.occupied_until || 'checkout'}. Reserving is blocked until check-out.`);
+                            setDetailsModal(room);
+                          } else {
+                            handleApply(room.id);
+                          }
+                        }}
                       >
                         <div className="desk-img-wrap" style={{ height: 180, position: 'relative', overflow: 'hidden' }}>
                           <img
@@ -260,11 +277,17 @@ export default function Rooms() {
                             onError={(e) => {
                               e.target.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80';
                             }}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', filter: isOccupied ? 'saturate(0.8)' : undefined }}
                           />
-                          <span className="desk-status-pill">
-                            ● {room.status === 'available' ? 'Available' : room.status}
-                          </span>
+                          {isOccupied ? (
+                            <span className="desk-status-pill" style={{ background: 'rgba(185, 28, 28, 0.92)', color: '#ffffff', border: '1px solid rgba(239, 68, 68, 0.7)', fontWeight: 800 }}>
+                              🔒 Occupied {room.occupied_until ? `(until ${room.occupied_until})` : ''}
+                            </span>
+                          ) : (
+                            <span className="desk-status-pill">
+                              ● Available
+                            </span>
+                          )}
                           <span style={{
                             position: 'absolute',
                             bottom: 10,
@@ -319,23 +342,50 @@ export default function Rooms() {
                             >
                               {t('details', 'Details')}
                             </button>
-                            <button
-                              type="button"
-                              className="auth-gold-submit-btn"
-                              style={{
-                                padding: '7px 14px',
-                                fontSize: 12,
-                                width: 'auto',
-                                flex: 1,
-                                margin: 0
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleApply(room.id);
-                              }}
-                            >
-                              {t('reserveNow', 'Reserve Suite ➔')}
-                            </button>
+                            {isOccupied ? (
+                              <button
+                                type="button"
+                                className="auth-gold-submit-btn"
+                                style={{
+                                  padding: '7px 14px',
+                                  fontSize: 12,
+                                  width: 'auto',
+                                  flex: 1,
+                                  margin: 0,
+                                  background: '#334155',
+                                  color: '#94a3b8',
+                                  border: '1px solid #475569',
+                                  cursor: 'not-allowed',
+                                  opacity: 0.85
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toast.error(`Suite #${room.room_number} is currently occupied until ${room.occupied_until || 'checkout'}. Reserving is blocked until check-out.`);
+                                  setDetailsModal(room);
+                                }}
+                                title="Occupied — cannot reserve until check-out"
+                              >
+                                🔒 Occupied
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="auth-gold-submit-btn"
+                                style={{
+                                  padding: '7px 14px',
+                                  fontSize: 12,
+                                  width: 'auto',
+                                  flex: 1,
+                                  margin: 0
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleApply(room.id);
+                                }}
+                              >
+                                {t('reserveNow', 'Reserve Suite ➔')}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -415,18 +465,37 @@ export default function Rooms() {
             <p style={{ color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.5, marginTop: 10 }}>
               {detailsModal.description}
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                const id = detailsModal.id;
-                setDetailsModal(null);
-                handleApply(id);
-              }}
-              className="auth-gold-submit-btn"
-              style={{ width: '100%', marginTop: 16, padding: 13, borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}
-            >
-              {t('reserveNow', 'Reserve this Suite Now ➔')}
-            </button>
+            {detailsModal.is_available === false || detailsModal.status === 'booked' || detailsModal.status === 'reserved' ? (
+              <div style={{
+                marginTop: 16,
+                padding: '14px 16px',
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1.5px solid rgba(239, 68, 68, 0.45)',
+                borderRadius: 12,
+                textAlign: 'center',
+                color: '#ef4444',
+                fontWeight: 700,
+                fontSize: 14
+              }}>
+                🔒 Currently Occupied {detailsModal.occupied_until ? `until ${detailsModal.occupied_until}` : ''}
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', marginTop: 4 }}>
+                  This suite is active with another customer. Reserving is blocked until the check-out date, at which point it automatically becomes available.
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = detailsModal.id;
+                  setDetailsModal(null);
+                  handleApply(id);
+                }}
+                className="auth-gold-submit-btn"
+                style={{ width: '100%', marginTop: 16, padding: 13, borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}
+              >
+                {t('reserveNow', 'Reserve this Suite Now ➔')}
+              </button>
+            )}
           </div>
         </div>
       )}

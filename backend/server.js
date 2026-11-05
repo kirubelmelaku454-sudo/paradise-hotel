@@ -136,17 +136,22 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Auto-release rooms when checkout date is reached (every 60s)
+// Auto-release rooms when checkout date is reached and release expired desk reservations (every 60s)
 try {
     const { releaseExpiredRooms } = require('./routes/rooms');
-    if (typeof releaseExpiredRooms === 'function') {
-        releaseExpiredRooms().catch(() => { });
-        setInterval(() => {
+    const { releaseExpiredDesks } = require('./routes/desks');
+    const runAutoReleases = () => {
+        if (typeof releaseExpiredRooms === 'function') {
             releaseExpiredRooms().catch((e) => console.error('auto-release rooms:', e.message));
-        }, 60 * 1000);
-    }
+        }
+        if (typeof releaseExpiredDesks === 'function') {
+            releaseExpiredDesks().catch((e) => console.error('auto-release desks:', e.message));
+        }
+    };
+    runAutoReleases();
+    setInterval(runAutoReleases, 60 * 1000);
 } catch (e) {
-    console.warn('Room auto-release scheduler not started:', e.message);
+    console.warn('Room/Desk auto-release scheduler not started:', e.message);
 }
 
 // Auto-seed expanded luxury catalog (50 foods, 40 rooms, 30 desks) if catalog is incomplete
