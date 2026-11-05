@@ -52,6 +52,12 @@ const ROOM_SHELF_META = [
     icon: '🌿',
     desc: 'Refined deluxe comfort rooms with plush queen beds, fiber WiFi, and tranquil courtyard views (Rooms 101–110)',
     tag: 'Deluxe Comfort'
+  },
+  {
+    title: 'Heritage & Highland Mountain Chalets',
+    icon: '⛰️',
+    desc: 'Timber-framed alpine chalets, canyon views, private saunas & secluded botanical villas (Rooms 501–510)',
+    tag: 'Highland Chalets'
   }
 ];
 
@@ -73,7 +79,7 @@ export default function Rooms() {
       .finally(() => setLoading(false));
   }, []);
 
-  const categories = ['All', 'Penthouse', 'Executive', 'Deluxe', 'Suite'];
+  const categories = ['All', 'Penthouse', 'Executive', 'Deluxe', 'Chalet', 'Suite'];
 
   const filteredRooms = rooms.filter((r) => {
     const typeStr = (r.room_type || r.type || '').toLowerCase();
@@ -99,7 +105,7 @@ export default function Rooms() {
           🏨 <span style={{ color: 'var(--accent)' }}>Luxury Rooms &amp; Suites</span> Directory
         </h1>
         <p className="page-subtitle" style={{ maxWidth: 650, margin: '0 auto', color: 'var(--text-muted)' }}>
-          Explore our 30 world-class suites and rooms arranged across dedicated horizontal movable collections with <strong>at most 10 rooms per shelf</strong>.
+          Explore our 40 world-class suites and rooms arranged across 4 dedicated collections with <strong>at most 10 rooms per shelf</strong>.
         </p>
       </div>
 

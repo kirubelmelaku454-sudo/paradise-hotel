@@ -149,6 +149,25 @@ try {
     console.warn('Room auto-release scheduler not started:', e.message);
 }
 
+// Auto-seed expanded luxury catalog (50 foods, 40 rooms, 30 desks) if catalog is incomplete
+(async function verifyAndSeedCatalog() {
+    try {
+        const db = require('./config/db');
+        const [r] = await db.query('SELECT COUNT(*) as c FROM rooms');
+        const [d] = await db.query('SELECT COUNT(*) as c FROM desks');
+        const [f] = await db.query('SELECT COUNT(*) as c FROM food_menu');
+        if ((r[0]?.c || 0) < 30 || (d[0]?.c || 0) < 20 || (f[0]?.c || 0) < 30) {
+            console.log('📦 Catalog incomplete, auto-seeding 50 foods, 40 rooms, 30 desks...');
+            const { seedExpanded } = require('../seed_expanded_luxury_items');
+            await seedExpanded(db);
+        } else {
+            console.log(`✨ Luxury Catalog verified: ${r[0]?.c} rooms, ${d[0]?.c} desks, ${f[0]?.c} foods`);
+        }
+    } catch (e) {
+        console.warn('Catalog verification notice:', e.message);
+    }
+})();
+
 app.listen(PORT, () => {
     const _smtpOk = !!(process.env.SMTP_USER && String(process.env.SMTP_PASS || '').replace(/\s+/g, ''));
     console.log(_smtpOk

@@ -35,6 +35,12 @@ const ROOM_SHELF_META = [
     icon: '🌿',
     desc: 'Refined deluxe comfort rooms with plush queen beds, fiber WiFi, and garden views (Rooms 101–110)',
     tag: 'Deluxe Comfort'
+  },
+  {
+    title: 'Heritage & Highland Mountain Chalets',
+    icon: '⛰️',
+    desc: 'Timber-framed alpine chalets, canyon views, private saunas & secluded botanical villas (Rooms 501–510)',
+    tag: 'Highland Chalets'
   }
 ];
 

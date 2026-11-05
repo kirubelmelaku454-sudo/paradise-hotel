@@ -1,7 +1,24 @@
-const db = require('./backend/config/db');
+const mysql = require('mysql2/promise');
 
-async function seedExpanded() {
-  console.log('--- Starting Expanded 50 Food, 30 Room, 30 Desk Seeding ---');
+async function getDbConnection() {
+  const isRemote = process.argv.includes('--remote') || process.env.REMOTE_SEED === 'true';
+  if (isRemote) {
+    console.log('Connecting to TiDB Cloud (gateway01.eu-central-1.prod.aws.tidbcloud.com)...');
+    return await mysql.createConnection({
+      host: 'gateway01.eu-central-1.prod.aws.tidbcloud.com',
+      port: 4000,
+      user: '32deWKgQj1yfgPZ.root',
+      password: '6oPK4SF7p7kCInni',
+      database: 'paradise_hotel',
+      ssl: { minVersion: 'TLSv1.2', rejectUnauthorized: false }
+    });
+  }
+  return require('./backend/config/db');
+}
+
+async function seedExpanded(customDb) {
+  const db = customDb || await getDbConnection();
+  console.log('--- Starting Expanded 50 Food, 40 Room, 30 Desk Seeding ---');
 
   // 1. 50 FOOD & BEVERAGES
   const foods = [
@@ -520,7 +537,19 @@ async function seedExpanded() {
     { room_number: '107', room_type: 'Superior King Comfort', price_per_night: 2800, capacity: 2, description: 'Silent whisper air conditioning, double soundproof glass, and ultra-comfortable King mattress for deep restful sleep.', image: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80', amenities: 'Soundproof, King Bed, Whisper AC, Smart TV, WiFi' },
     { room_number: '108', room_type: 'Deluxe Accessible Room', price_per_night: 2700, capacity: 2, description: 'Barrier-free ground level suite with wide doorways, roll-in shower with safety bench, and king bed.', image: 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1200&q=80', amenities: 'Wheelchair Accessible, Roll-in Shower, King Bed, Emergency Cord' },
     { room_number: '109', room_type: 'Traveler Deluxe Single', price_per_night: 1800, capacity: 1, description: 'Budget luxury single room with comfortable orthopedic mattress, power outlets, and clean modern ensuite.', image: 'https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=1200&q=80', amenities: 'Single Bed, Work Desk, Hot Water, WiFi, Daily Maid Service' },
-    { room_number: '110', room_type: 'Deluxe Courtyard Queen', price_per_night: 2750, capacity: 2, description: 'Overlooks the central stone courtyard and water fountain. Peaceful ambiance with comfortable queen bedding.', image: 'https://images.unsplash.com/photo-1587985064135-0366536eab42?auto=format&fit=crop&w=1200&q=80', amenities: 'Courtyard Fountain View, Queen Bed, WiFi, Safe, Smart TV' }
+    { room_number: '110', room_type: 'Deluxe Courtyard Queen', price_per_night: 2750, capacity: 2, description: 'Overlooks the central stone courtyard and water fountain. Peaceful ambiance with comfortable queen bedding.', image: 'https://images.unsplash.com/photo-1587985064135-0366536eab42?auto=format&fit=crop&w=1200&q=80', amenities: 'Courtyard Fountain View, Queen Bed, WiFi, Safe, Smart TV' },
+
+    // Shelf 4: Heritage & Highland Mountain Chalets (10)
+    { room_number: '501', room_type: 'Highland Alpine Chalet', price_per_night: 4600, capacity: 2, description: 'Timber-framed alpine haven with wood-burning stove, fur throws, panoramic Choke Mountain views, and private deck.', image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1200&q=80', amenities: 'Fireplace, Alpine Balcony, King Bed, Starlink WiFi, Heated Floor' },
+    { room_number: '502', room_type: 'Choke Ridge View Suite', price_per_night: 4400, capacity: 2, description: 'Perched on the top ridge with floor-to-ceiling glass looking toward the Blue Nile basin and morning mist.', image: 'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=1200&q=80', amenities: 'Ridge View, King Bed, Free Breakfast, Minibar, Smart TV' },
+    { room_number: '503', room_type: 'Gojjam Heritage King', price_per_night: 3300, capacity: 2, description: 'Handcrafted rosewood furnishings, hand-woven Gojjam cotton blankets, rainfall shower, and espresso bar.', image: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80', amenities: 'King Bed, Heritage Decor, Espresso Machine, Rain Shower, WiFi' },
+    { room_number: '504', room_type: 'Blue Nile Panorama Suite', price_per_night: 4900, capacity: 3, description: 'Sweeping vistas of the Blue Nile canyon gorges with private viewing telescope, sun lounger, and daybed.', image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80', amenities: 'Telescope, King Bed + Daybed, Sun Lounger, Balcony, Starlink WiFi' },
+    { room_number: '505', room_type: 'Presidential Garden Villa', price_per_night: 8500, capacity: 4, description: 'Stand-alone villa nestled in flowering botanical gardens with private heated plunge pool and personal chef service.', image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80', amenities: 'Private Plunge Pool, 2 King Beds, Chef Service, Butler, Garden Terrace' },
+    { room_number: '506', room_type: 'Sunset Terrace Deluxe', price_per_night: 3500, capacity: 2, description: 'West-facing private terrace for golden hour sunsets over Debre Markos valley with comfortable lounge seats.', image: 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=1200&q=80', amenities: 'Sunset Terrace, King Bed, Bathrobe, Minibar, Smart Entertainment' },
+    { room_number: '507', room_type: 'Highland Executive Studio', price_per_night: 3700, capacity: 2, description: 'Ergonomic business workstation with dual monitors dock, high-speed fiber internet, and quiet acoustic insulation.', image: 'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=1200&q=80', amenities: 'Workstation Dock, High-Speed WiFi, Soundproof, King Bed, Rain Shower' },
+    { room_number: '508', room_type: 'Royal Courtyard Suite', price_per_night: 4200, capacity: 2, description: 'Spacious parlor with Italian leather sofa, direct courtyard fountain access, and marble bathtub.', image: 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1200&q=80', amenities: 'Marble Bathtub, Living Parlor, Fountain View, King Bed, WiFi' },
+    { room_number: '509', room_type: 'Superior Mountain Double', price_per_night: 3600, capacity: 4, description: 'Two queen beds with orthopedic memory foam, mountain terrace, and full in-room dining setup.', image: 'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=1200&q=80', amenities: '2 Queen Beds, Mountain Terrace, Smart TV, WiFi, Safe' },
+    { room_number: '510', room_type: 'Imperial VIP Sanctuary', price_per_night: 7500, capacity: 2, description: 'Private sanctuary with cedar sauna, outdoor hydrotherapy hot tub, king bed, and private concierge attendant.', image: 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=1200&q=80', amenities: 'Private Cedar Sauna, Hydrotherapy Tub, Butler, King Bed, Starlink' }
   ];
 
   // Insert or update rooms
@@ -598,12 +627,21 @@ async function seedExpanded() {
   }
   console.log(`✅ Desks seeded successfully! Total desk count: ${desks.length}`);
 
-  console.log('--- Seeding Complete: 50 Foods, 30 Rooms, 30 Desks in MySQL Database! ---');
-  process.exit();
+  console.log('--- Seeding Complete: 50 Foods, 40 Rooms, 30 Desks in Database! ---');
+  return { foods: foods.length, rooms: rooms.length, desks: desks.length };
 }
 
-seedExpanded().catch(err => {
-  console.error('Seeding error:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  seedExpanded()
+    .then((counts) => {
+      console.log('Done!', counts);
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error('Seeding error:', err);
+      process.exit(1);
+    });
+}
+
+module.exports = { seedExpanded };
 
