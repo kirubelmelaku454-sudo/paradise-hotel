@@ -13,6 +13,14 @@ const TRANSLATIONS = {
     en: {
         // Nav & Header
         home: 'Home',
+        navHome: 'Home',
+        navRooms: 'Rooms',
+        navDesks: 'Desks',
+        navDining: 'Dining',
+        navGallery: 'Gallery',
+        navOffers: 'Offers',
+        navAbout: 'About',
+        navContact: 'Contact',
         about: 'About Us',
         contact: 'Contact Us',
         faq: 'FAQs',
@@ -158,6 +166,14 @@ const TRANSLATIONS = {
     am: {
         // Nav & Header
         home: 'ዋና ገጽ',
+        navHome: 'ዋና ገጽ',
+        navRooms: 'ክፍሎች',
+        navDesks: 'ጠረጴዛዎች',
+        navDining: 'ምግብና መጠጥ',
+        navGallery: 'ጋለሪ',
+        navOffers: 'ቅናሾች',
+        navAbout: 'ስለ እኛ',
+        navContact: 'ያግኙን',
         about: 'ስለ እኛ',
         contact: 'ያግኙን',
         faq: 'ተደጋጋሚ ጥያቄዎች',
@@ -303,6 +319,14 @@ const TRANSLATIONS = {
     om: {
         // Nav & Header
         home: 'Fuula Duraa',
+        navHome: 'Fuula Dura',
+        navRooms: 'Kutaalee',
+        navDesks: 'Minjaala',
+        navDining: 'Nyaata',
+        navGallery: 'Gaallarii',
+        navOffers: 'Hir\'ina',
+        navAbout: 'Waa\'ee Keenya',
+        navContact: 'Nu Qunnamaa',
         about: 'Waa\'ee Keenya',
         contact: 'Nu Qunnamaa',
         faq: 'Gaaffilee Yeroo Baay\'ee',
@@ -448,6 +472,14 @@ const TRANSLATIONS = {
     ti: {
         // Nav & Header
         home: 'ቀንዲ ገጽ',
+        navHome: 'ቀንዲ ገጽ',
+        navRooms: 'ክፍልታት',
+        navDesks: 'ጣውላታት',
+        navDining: 'መግብን መስተን',
+        navGallery: 'ጋለሪ',
+        navOffers: 'ቅናሽ',
+        navAbout: 'ብዛዕባና',
+        navContact: 'ርኸቡና',
         about: 'ብዛዕባና',
         contact: 'ርኸቡና',
         faq: 'ተደጋጋሚ ሕቶታት',

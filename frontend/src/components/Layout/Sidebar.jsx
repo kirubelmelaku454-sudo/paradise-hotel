@@ -1,34 +1,40 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { LanguageContext } from '../../context/LanguageContext';
 import LuxuryLogo from '../Common/LuxuryLogo';
-import api from '../../api';
+import api, { getMediaUrl } from '../../api';
 
 const getNavItems = (role, hasDiscount, t, user) => {
     const discountItem = [
-        { icon: '🏷️', label: t('discounts', 'Discounts & Offers'), path: '/discounts' }
+        { icon: '🏷️', label: t('navOffers', 'Offers'), path: '/discounts' }
     ];
 
     const customer = [
-        { icon: '🛏️', label: t('reserveRooms', 'Reserve Rooms'), path: '/rooms' },
-        { icon: '🍽️', label: t('reserveDesk', 'Reserve Desk'), path: '/reserve-desk' },
-        { icon: '🍕', label: t('orderFood', 'Order Food'), path: '/order-food' },
+        { icon: '🏠', label: t('navHome', 'Home'), path: '/home' },
+        { icon: '🛏️', label: t('navRooms', 'Rooms'), path: '/rooms' },
+        { icon: '🍽️', label: t('navDesks', 'Dining Desks'), path: '/reserve-desk' },
+        { icon: '🍕', label: t('navDining', 'Dining'), path: '/order-food' },
+        { icon: '🖼️', label: t('navGallery', '3D Tour & Gallery'), path: '/gallery' },
         ...discountItem,
         { icon: '📊', label: t('myBookings', 'My Bookings'), path: '/dashboard/customer' },
-        { icon: '📨', label: t('contact', 'Contact & Inquiries'), path: '/contact' },
+        { icon: 'ℹ️', label: t('navAbout', 'About Hotel'), path: '/about' },
+        { icon: '📨', label: t('navContact', 'Contact'), path: '/contact' },
         { icon: '💬', label: t('feedback', 'Feedback'), path: '/feedback' },
         { icon: '⚠️', label: t('suggestions', 'Give Suggestion'), path: '/report-problem' },
     ];
 
     const customerLoggedIn = [
-        { icon: '🛏️', label: t('reserveRooms', 'Reserve Rooms'), path: '/rooms' },
-        { icon: '🍽️', label: t('reserveDesk', 'Reserve Desk'), path: '/reserve-desk' },
-        { icon: '🍕', label: t('orderFood', 'Order Food'), path: '/order-food' },
+        { icon: '🏠', label: t('navHome', 'Home'), path: '/home' },
+        { icon: '🛏️', label: t('navRooms', 'Rooms'), path: '/rooms' },
+        { icon: '🍽️', label: t('navDesks', 'Dining Desks'), path: '/reserve-desk' },
+        { icon: '🍕', label: t('navDining', 'Dining'), path: '/order-food' },
+        { icon: '🖼️', label: t('navGallery', '3D Tour & Gallery'), path: '/gallery' },
         ...discountItem,
         { icon: '📊', label: t('myBookings', 'My Bookings'), path: '/dashboard/customer' },
         { icon: '🏦', label: t('myAccounts', 'My Accounts'), path: '/my-accounts' },
-        { icon: '📨', label: t('contact', 'Contact & Inquiries'), path: '/contact' },
+        { icon: 'ℹ️', label: t('navAbout', 'About Hotel'), path: '/about' },
+        { icon: '📨', label: t('navContact', 'Contact'), path: '/contact' },
         { icon: '💬', label: t('feedback', 'Feedback'), path: '/feedback' },
         { icon: '⚠️', label: t('suggestions', 'Give Suggestion'), path: '/report-problem' },
     ];
@@ -94,11 +100,31 @@ const getNavItems = (role, hasDiscount, t, user) => {
 };
 
 const Sidebar = ({ isOpen, onClose }) => {
-    const { user } = useContext(AuthContext);
+    const { user, logout } = useContext(AuthContext);
     const { t, lang, setLang, languages } = useContext(LanguageContext);
     const location = useLocation();
+    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const [hasDiscount, setHasDiscount] = useState(false);
+
+    const handleLogout = () => {
+        logout();
+        if (onClose) onClose();
+        navigate('/login');
+    };
+
+    const getDashboardLink = () => {
+        if (!user) return '/dashboard/customer';
+        if (user.username === 'housekeeping' || user.role === 'housekeeping') {
+            return '/dashboard/housekeeping';
+        }
+        switch (user.role) {
+            case 'admin': return '/dashboard/admin';
+            case 'manager': return '/dashboard/manager';
+            case 'receptionist': return '/dashboard/receptionist';
+            default: return '/dashboard/customer';
+        }
+    };
 
     const role = user?.role || null;
     const isCustomerView = !role || role === 'customer';
@@ -151,6 +177,59 @@ const Sidebar = ({ isOpen, onClose }) => {
                 )}
             </div>
 
+            {/* Mobile User Profile & Instant Logout Card */}
+            {user ? (
+                <div className="sidebar-user-card">
+                    <div className="sidebar-user-info">
+                        <div className="sidebar-user-avatar">
+                            {user.profile_image ? (
+                                <img src={getMediaUrl(user.profile_image)} alt="Profile" />
+                            ) : (
+                                <span>{(user.first_name?.[0] || user.username?.[0] || 'U').toUpperCase()}</span>
+                            )}
+                        </div>
+                        <div className="sidebar-user-details">
+                            <div className="sidebar-user-name">
+                                {(user.first_name || user.firstName || '').trim()
+                                    ? `${user.first_name || user.firstName} ${user.last_name || user.lastName || ''}`.trim()
+                                    : (user.username || 'VIP Guest')}
+                            </div>
+                            <div className="sidebar-user-role">
+                                {user.role ? user.role.toUpperCase() : 'GUEST'}
+                            </div>
+                            <div className="sidebar-user-email">{user.email || user.username}</div>
+                        </div>
+                    </div>
+
+                    <div className="sidebar-user-actions">
+                        <Link to="/profile" className="sidebar-user-link" onClick={onClose}>
+                            <span>👤</span> {t('profile', 'Profile')}
+                        </Link>
+                        <Link to={getDashboardLink()} className="sidebar-user-link" onClick={onClose}>
+                            <span>📊</span> {t('dashboard', 'Dashboard')}
+                        </Link>
+                    </div>
+
+                    <button type="button" className="sidebar-logout-btn" onClick={handleLogout}>
+                        <span>🚪</span>
+                        <span>{t('logout', 'Logout')}</span>
+                    </button>
+                </div>
+            ) : (
+                <div className="sidebar-guest-card">
+                    <div className="sidebar-guest-title">👑 Paradise 5-Star Hotel</div>
+                    <div className="sidebar-guest-sub">{t('welcome', 'Welcome, Guest!')}</div>
+                    <div className="sidebar-guest-btns">
+                        <Link to="/login" className="sidebar-guest-btn signin" onClick={onClose}>
+                            <span>🔑</span> {t('signIn', 'Sign In')}
+                        </Link>
+                        <Link to="/register" className="sidebar-guest-btn register" onClick={onClose}>
+                            <span>✨</span> {t('register', 'Register')}
+                        </Link>
+                    </div>
+                </div>
+            )}
+
             <nav className="sidebar-nav">
                 <div className="sidebar-section-title">Navigation</div>
                 {navItems.map((item, idx) => {
@@ -171,6 +250,15 @@ const Sidebar = ({ isOpen, onClose }) => {
                         </Link>
                     );
                 })}
+
+                {user && (
+                    <div style={{ padding: '14px 10px 6px' }}>
+                        <button type="button" className="sidebar-logout-btn" onClick={handleLogout}>
+                            <span>🚪</span>
+                            <span>{t('logout', 'Logout')}</span>
+                        </button>
+                    </div>
+                )}
             </nav>
 
             <div className="sidebar-footer">

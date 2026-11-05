@@ -2226,21 +2226,100 @@ img { max-width: 100%; }
 .header-nav-links {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 6px;
 }
 
 .header-link {
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.88);
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13.5px;
     text-decoration: none;
-    transition: var(--transition);
-    padding: 6px 2px;
+    transition: all 0.22s ease-in-out;
+    padding: 7px 11px;
+    border-radius: 8px;
     position: relative;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    letter-spacing: 0.2px;
 }
 
 .header-link:hover {
-    color: var(--accent);
+    color: #ffd700 !important;
+    background: rgba(212, 175, 55, 0.12);
+    transform: translateY(-2px);
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.45);
+}
+
+.header-link::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    right: 50%;
+    height: 2.5px;
+    background: linear-gradient(90deg, #d4af37, #ffd700, #d4af37);
+    border-radius: 4px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+}
+
+.header-link:hover::after {
+    left: 10px;
+    right: 10px;
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+}
+
+/* Active Page State */
+.header-link.active {
+    color: #ffd700 !important;
+    background: rgba(212, 175, 55, 0.18);
+    font-weight: 700;
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    box-shadow: 0 2px 14px rgba(212, 175, 55, 0.2);
+}
+
+.header-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 8px;
+    right: 8px;
+    height: 3px;
+    background: linear-gradient(90deg, #d4af37, #ffe066, #d4af37);
+    border-radius: 4px;
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(255, 215, 0, 0.85);
+}
+
+.header-user-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.header-mobile-logout-btn {
+    display: none;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.18);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    color: #fca5a5;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.header-mobile-logout-btn:hover {
+    background: rgba(239, 68, 68, 0.35);
+    border-color: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+    transform: scale(1.04);
 }
 
 /* Control Pills */
@@ -2425,6 +2504,201 @@ img { max-width: 100%; }
     font-weight: 800;
     color: var(--accent);
     letter-spacing: 1.5px;
+}
+
+/* Sidebar User & Guest Cards for Mobile */
+.sidebar-user-card {
+    margin: 10px 14px 14px;
+    padding: 14px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(212, 175, 55, 0.1) 100%);
+    border: 1px solid rgba(212, 175, 55, 0.28);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+
+.sidebar-user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.sidebar-user-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #d4af37, #996515);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    border: 2px solid #ffd700;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+}
+
+.sidebar-user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.sidebar-user-details {
+    overflow: hidden;
+    flex: 1;
+}
+
+.sidebar-user-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-user-role {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 800;
+    color: #ffd700;
+    background: rgba(212, 175, 55, 0.15);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 2px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.sidebar-user-email {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.sidebar-user-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.sidebar-user-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.sidebar-user-link:hover {
+    background: rgba(212, 175, 55, 0.18);
+    border-color: #d4af37;
+    color: #ffd700;
+}
+
+.sidebar-logout-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 14px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(185, 28, 28, 0.28) 100%);
+    border: 1.5px solid rgba(239, 68, 68, 0.5);
+    color: #fca5a5;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sidebar-logout-btn:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.45) 0%, rgba(185, 28, 28, 0.55) 100%);
+    border-color: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+    transform: translateY(-1px);
+}
+
+.sidebar-guest-card {
+    margin: 10px 14px 14px;
+    padding: 14px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(212, 175, 55, 0.08) 100%);
+    border: 1px solid rgba(212, 175, 55, 0.22);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.sidebar-guest-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+}
+
+.sidebar-guest-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.sidebar-guest-btns {
+    display: flex;
+    gap: 8px;
+}
+
+.sidebar-guest-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.sidebar-guest-btn.signin {
+    background: linear-gradient(135deg, #d4af37, #aa8012);
+    color: #070b14;
+    border: none;
+}
+
+.sidebar-guest-btn.signin:hover {
+    background: linear-gradient(135deg, #ffd700, #c49a1b);
+    transform: translateY(-1px);
+}
+
+.sidebar-guest-btn.register {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+
+.sidebar-guest-btn.register:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #ffd700;
+    color: #ffd700;
 }
 
 .sidebar-section-title {
@@ -4235,6 +4509,27 @@ img { max-width: 100%; }
     .header-nav-links {
         display: none !important;
     }
+    .header-mobile-logout-btn {
+        display: inline-flex !important;
+    }
+    .header-user-wrapper {
+        gap: 6px;
+    }
+}
+
+@media (max-width: 640px) {
+    .header-weather-pill .weather-details {
+        display: none !important;
+    }
+    .currency-pill .control-label {
+        display: none !important;
+    }
+    .lang-pill .control-label {
+        display: none !important;
+    }
+    .lang-pill .control-caret {
+        display: none !important;
+    }
 }
 
 @media (max-width: 540px) {
@@ -4242,11 +4537,11 @@ img { max-width: 100%; }
         padding: 0 8px !important;
     }
     .luxury-crest-svg {
-        width: 38px !important;
-        height: 38px !important;
+        width: 36px !important;
+        height: 36px !important;
     }
     .luxury-logo-main {
-        font-size: 14px !important;
+        font-size: 13.5px !important;
     }
     .header-control-pill {
         padding: 4px 6px;
@@ -4254,6 +4549,13 @@ img { max-width: 100%; }
     .header-auth-btns .header-btn {
         padding: 6px 10px;
         font-size: 12px;
+    }
+    .header-mobile-logout-btn .mobile-logout-text {
+        display: none;
+    }
+    .header-mobile-logout-btn {
+        padding: 5px 8px;
+        font-size: 15px;
     }
 }
 

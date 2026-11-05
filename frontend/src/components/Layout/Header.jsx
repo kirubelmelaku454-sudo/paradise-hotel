@@ -1,5 +1,5 @@
 import React, { useContext, useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { CurrencyContext } from '../../context/CurrencyContext';
@@ -17,11 +17,22 @@ const Header = ({ sidebarOpen, onSidebarToggle }) => {
     const { lang, setLang, t, languages } = useContext(LanguageContext);
 
     const navigate = useNavigate();
+    const location = useLocation();
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
 
     const dropdownRef = useRef(null);
     const langRef = useRef(null);
+
+    const isNavActive = (path) => {
+        if (path === '/home') {
+            return location.pathname === '/home' || location.pathname === '/';
+        }
+        if (path === '/rooms') {
+            return location.pathname === '/rooms' || location.pathname === '/reserve-room';
+        }
+        return location.pathname === path || location.pathname.startsWith(path + '/');
+    };
 
     const handleLogout = () => {
         logout();
@@ -84,16 +95,32 @@ const Header = ({ sidebarOpen, onSidebarToggle }) => {
                 </Link>
             </div>
 
-            {/* Center/Nav: Core Links */}
+            {/* Center/Nav: Core Links with Active Glow & Hover States */}
             <nav className="header-nav-links">
-                <Link to="/home" className="header-link">{t('home', 'Home')}</Link>
-                <Link to="/rooms" className="header-link">{t('reserveRooms', 'Rooms')}</Link>
-                <Link to="/reserve-desk" className="header-link">{t('reserveDesk', 'Desks')}</Link>
-                <Link to="/order-food" className="header-link">{t('orderFood', 'Dining')}</Link>
-                <Link to="/gallery" className="header-link">{t('gallery', 'Gallery')}</Link>
-                <Link to="/discounts" className="header-link">{t('discounts', 'Discounts')}</Link>
-                <Link to="/about" className="header-link">{t('about', 'About')}</Link>
-                <Link to="/contact" className="header-link">{t('contact', 'Contact')}</Link>
+                <Link to="/home" className={`header-link ${isNavActive('/home') ? 'active' : ''}`}>
+                    {t('navHome', 'Home')}
+                </Link>
+                <Link to="/rooms" className={`header-link ${isNavActive('/rooms') ? 'active' : ''}`}>
+                    {t('navRooms', 'Rooms')}
+                </Link>
+                <Link to="/reserve-desk" className={`header-link ${isNavActive('/reserve-desk') ? 'active' : ''}`}>
+                    {t('navDesks', 'Desks')}
+                </Link>
+                <Link to="/order-food" className={`header-link ${isNavActive('/order-food') ? 'active' : ''}`}>
+                    {t('navDining', 'Dining')}
+                </Link>
+                <Link to="/gallery" className={`header-link ${isNavActive('/gallery') ? 'active' : ''}`}>
+                    {t('navGallery', 'Gallery')}
+                </Link>
+                <Link to="/discounts" className={`header-link ${isNavActive('/discounts') ? 'active' : ''}`}>
+                    {t('navOffers', 'Offers')}
+                </Link>
+                <Link to="/about" className={`header-link ${isNavActive('/about') ? 'active' : ''}`}>
+                    {t('navAbout', 'About')}
+                </Link>
+                <Link to="/contact" className={`header-link ${isNavActive('/contact') ? 'active' : ''}`}>
+                    {t('navContact', 'Contact')}
+                </Link>
             </nav>
 
             {/* Right: Actions, Controls & Profile */}
@@ -169,56 +196,70 @@ const Header = ({ sidebarOpen, onSidebarToggle }) => {
 
                 {/* 5. User Profile / Sign In */}
                 {user ? (
-                    <div
-                        className={`header-user ${dropdownOpen ? 'open' : ''}`}
-                        ref={dropdownRef}
-                        onClick={() => setDropdownOpen(!dropdownOpen)}
-                    >
-                        <div className="header-avatar">
-                            {user.profile_image ? (
-                                <img
-                                    src={getMediaUrl(user.profile_image)}
-                                    alt="Profile"
-                                />
-                            ) : (
-                                <span>{getInitials().toUpperCase() || '?'}</span>
+                    <div className="header-user-wrapper">
+                        <div
+                            className={`header-user ${dropdownOpen ? 'open' : ''}`}
+                            ref={dropdownRef}
+                            onClick={() => setDropdownOpen(!dropdownOpen)}
+                            title="My Account"
+                        >
+                            <div className="header-avatar">
+                                {user.profile_image ? (
+                                    <img
+                                        src={getMediaUrl(user.profile_image)}
+                                        alt="Profile"
+                                    />
+                                ) : (
+                                    <span>{getInitials().toUpperCase() || '?'}</span>
+                                )}
+                            </div>
+                            <div className="header-welcome hide-mobile">
+                                <span className="welcome-sub">{t('welcome', 'Welcome')},</span>
+                                <span className="welcome-name">
+                                    {(user.first_name || user.firstName || '').trim()
+                                        || (user.fullName || user.full_name || '').trim().split(/\s+/)[0]
+                                        || (user.username && !String(user.username).includes('@') ? user.username : '')
+                                        || t('guest', 'Guest')}
+                                </span>
+                            </div>
+                            <span className="header-caret">▾</span>
+
+                            {dropdownOpen && (
+                                <div className="header-dropdown profile-menu animate-fade-in">
+                                    <div className="dropdown-user-badge">
+                                        <div className="badge-role">{(user.role || 'customer').toUpperCase()}</div>
+                                        <div className="badge-email">{user.email || user.username}</div>
+                                    </div>
+                                    <hr />
+                                    <Link to="/profile" onClick={() => setDropdownOpen(false)}>
+                                        <span>👤</span> {t('profile', 'Update Profile')}
+                                    </Link>
+                                    <Link to={getDashboardLink()} onClick={() => setDropdownOpen(false)}>
+                                        <span>📊</span> {t('dashboard', 'Dashboard')}
+                                    </Link>
+                                    {user.role === 'customer' && (
+                                        <Link to="/my-accounts" onClick={() => setDropdownOpen(false)}>
+                                            <span>🏦</span> {t('myAccounts', 'My Accounts')}
+                                        </Link>
+                                    )}
+                                    <hr />
+                                    <button type="button" onClick={handleLogout} className="logout-btn">
+                                        <span>🚪</span> {t('logout', 'Logout')}
+                                    </button>
+                                </div>
                             )}
                         </div>
-                        <div className="header-welcome hide-mobile">
-                            <span className="welcome-sub">{t('welcome', 'Welcome')},</span>
-                            <span className="welcome-name">
-                                {(user.first_name || user.firstName || '').trim()
-                                    || (user.fullName || user.full_name || '').trim().split(/\s+/)[0]
-                                    || (user.username && !String(user.username).includes('@') ? user.username : '')
-                                    || t('guest', 'Guest')}
-                            </span>
-                        </div>
-                        <span className="header-caret">▾</span>
 
-                        {dropdownOpen && (
-                            <div className="header-dropdown profile-menu animate-fade-in">
-                                <div className="dropdown-user-badge">
-                                    <div className="badge-role">{(user.role || 'customer').toUpperCase()}</div>
-                                    <div className="badge-email">{user.email || user.username}</div>
-                                </div>
-                                <hr />
-                                <Link to="/profile" onClick={() => setDropdownOpen(false)}>
-                                    <span>👤</span> {t('profile', 'Update Profile')}
-                                </Link>
-                                <Link to={getDashboardLink()} onClick={() => setDropdownOpen(false)}>
-                                    <span>📊</span> {t('dashboard', 'Dashboard')}
-                                </Link>
-                                {user.role === 'customer' && (
-                                    <Link to="/my-accounts" onClick={() => setDropdownOpen(false)}>
-                                        <span>🏦</span> {t('myAccounts', 'My Accounts')}
-                                    </Link>
-                                )}
-                                <hr />
-                                <button type="button" onClick={handleLogout} className="logout-btn">
-                                    <span>🚪</span> {t('logout', 'Logout')}
-                                </button>
-                            </div>
-                        )}
+                        {/* Direct Mobile Logout Button for effortless one-tap logout */}
+                        <button
+                            type="button"
+                            className="header-mobile-logout-btn"
+                            onClick={handleLogout}
+                            title={`${t('logout', 'Logout')} - Click to Sign Out`}
+                        >
+                            <span>🚪</span>
+                            <span className="mobile-logout-text">{t('logout', 'Logout')}</span>
+                        </button>
                     </div>
                 ) : (
                     <div className="header-auth-btns">
